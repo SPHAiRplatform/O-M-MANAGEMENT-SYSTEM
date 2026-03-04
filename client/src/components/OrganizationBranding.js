@@ -23,9 +23,16 @@ function OrganizationBranding() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [removingLogo, setRemovingLogo] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
   const [selectedLogoFile, setSelectedLogoFile] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
+
+  // Uploads are served at /uploads, not under /api
+  const getUploadsBaseUrl = () => {
+    const u = getApiBaseUrl();
+    return u.replace(/\/api\/?$/, '') || u;
+  };
 
   useEffect(() => {
     if (id) {
@@ -37,8 +44,7 @@ function OrganizationBranding() {
   // Update logo preview when organization is loaded
   useEffect(() => {
     if (organization && !logoPreview && !branding.logo_url) {
-      // Try to load default logo from company folder
-      const defaultLogoUrl = `${getApiBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
+      const defaultLogoUrl = `${getUploadsBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
       fetch(defaultLogoUrl, { method: 'HEAD', credentials: 'include' })
         .then(res => {
           if (res.ok) {
@@ -92,15 +98,13 @@ function OrganizationBranding() {
         
         // Set logo preview if logo_url exists
         if (data.logo_url) {
-          // If it's a relative URL, construct full URL
-          const logoUrl = data.logo_url.startsWith('http') 
-            ? data.logo_url 
-            : `${getApiBaseUrl()}${data.logo_url.startsWith('/') ? data.logo_url : '/' + data.logo_url}`;
+          const logoUrl = data.logo_url.startsWith('http')
+            ? data.logo_url
+            : `${getUploadsBaseUrl()}${data.logo_url.startsWith('/') ? data.logo_url : '/' + data.logo_url}`;
           setLogoPreview(logoUrl);
         } else {
-          // Try to load default logo from company folder
           if (organization) {
-            const defaultLogoUrl = `${getApiBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
+            const defaultLogoUrl = `${getUploadsBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
             // Test if logo exists
             fetch(defaultLogoUrl, { method: 'HEAD', credentials: 'include' })
               .then(res => {
@@ -190,9 +194,9 @@ function OrganizationBranding() {
       }));
       
       // Construct full URL for preview
-      const logoUrl = data.logo_url.startsWith('http') 
-        ? data.logo_url 
-        : `${getApiBaseUrl()}${data.logo_url.startsWith('/') ? data.logo_url : '/' + data.logo_url}`;
+      const logoUrl = data.logo_url.startsWith('http')
+        ? data.logo_url
+        : `${getUploadsBaseUrl()}${data.logo_url.startsWith('/') ? data.logo_url : '/' + data.logo_url}`;
       setLogoPreview(logoUrl);
       setSelectedLogoFile(null);
       
@@ -207,6 +211,41 @@ function OrganizationBranding() {
       setError(getErrorMessage(error));
     } finally {
       setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      setRemovingLogo(true);
+      setError('');
+
+      // Use DELETE endpoint to remove logo file and clear database
+      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/logo`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove logo');
+      }
+
+      // Clear local state immediately
+      setBranding(prev => ({ ...prev, logo_url: '' }));
+      setLogoPreview(null);
+      setSelectedLogoFile(null);
+      const fileInput = document.getElementById('logo-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+
+      // Don't reload branding after deletion to avoid race condition with default logo check
+      // The DELETE endpoint has already cleared the database and deleted the file
+      setAlertSuccess('Logo removed successfully');
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setRemovingLogo(false);
     }
   };
 
@@ -271,9 +310,9 @@ function OrganizationBranding() {
               {logoPreview && (
                 <div style={{ marginBottom: '10px', textAlign: 'center' }}>
                   <img 
-                    src={logoPreview.startsWith('data:') || logoPreview.startsWith('http') 
-                      ? logoPreview 
-                      : `${getApiBaseUrl()}${logoPreview.startsWith('/') ? logoPreview : '/' + logoPreview}`}
+                    src={logoPreview.startsWith('data:') || logoPreview.startsWith('http')
+                      ? logoPreview
+                      : `${getUploadsBaseUrl()}${logoPreview.startsWith('/') ? logoPreview : '/' + logoPreview}`}
                     alt="Logo Preview" 
                     style={{ 
                       maxHeight: '100px', 
@@ -289,6 +328,17 @@ function OrganizationBranding() {
                       e.target.style.display = 'none';
                     }}
                   />
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      onClick={handleRemoveLogo}
+                      disabled={removingLogo}
+                      style={{ marginLeft: '0' }}
+                    >
+                      {removingLogo ? 'Removing...' : 'Remove logo'}
+                    </button>
+                  </div>
                 </div>
               )}
               <input
@@ -303,7 +353,7 @@ function OrganizationBranding() {
                 className="btn btn-sm btn-primary"
                 onClick={handleLogoUpload}
                 disabled={!selectedLogoFile || uploadingLogo}
-                style={{ marginLeft: '10px' }}
+                style={{ marginLeft: logoPreview ? '10px' : '0' }}
               >
                 {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
               </button>

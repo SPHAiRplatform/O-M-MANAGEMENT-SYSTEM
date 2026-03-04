@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { getNotifications, getUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, getTrackerStatusRequests, reviewTrackerStatusRequest } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { ErrorAlert, SuccessAlert, InfoAlert } from './ErrorAlert';
-import { 
+import { ConfirmDialog } from './ConfirmDialog';
+import {
   FaTasks, 
   FaBell, 
   FaExclamationTriangle, 
@@ -41,6 +42,7 @@ function Notifications() {
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [viewedNotifications, setViewedNotifications] = useState(new Set());
   const [hoveredNotification, setHoveredNotification] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [alertError, setAlertError] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null);
@@ -175,19 +177,25 @@ function Notifications() {
 
   const handleDelete = useCallback(async (id, e) => {
     e.stopPropagation(); // Prevent marking as read when deleting
-    if (!window.confirm('Delete this notification?')) return;
-    
-    try {
-      await deleteNotification(id);
-      if (selectedNotification?.id === id) {
-        setSelectedNotification(null);
+    setConfirmDialog({
+      title: 'Delete Notification',
+      message: 'Delete this notification?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteNotification(id);
+          if (selectedNotification?.id === id) {
+            setSelectedNotification(null);
+          }
+          loadNotifications();
+          loadUnreadCount();
+        } catch (error) {
+          console.error('Error deleting notification:', error);
+          setAlertError('Failed to delete notification');
+        }
       }
-      loadNotifications();
-      loadUnreadCount();
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-      setAlertError('Failed to delete notification');
-    }
+    });
   }, [loadNotifications, loadUnreadCount, selectedNotification]);
 
   const handleReviewRequest = useCallback(async (requestId, action) => {
@@ -424,6 +432,7 @@ function Notifications() {
       <ErrorAlert error={alertError} onClose={() => setAlertError(null)} />
       <SuccessAlert message={alertSuccess} onClose={() => setAlertSuccess(null)} />
       <InfoAlert message={alertInfo} onClose={() => setAlertInfo(null)} />
+      <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
       {/* Header Toolbar */}
       <div className="notifications-toolbar">

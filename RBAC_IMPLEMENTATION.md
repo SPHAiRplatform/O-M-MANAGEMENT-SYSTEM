@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SPHAIR Platform now includes a comprehensive Role-Based Access Control (RBAC) system that provides fine-grained permission management based on user roles and responsibilities.
+The SPHAiR Digital now includes a comprehensive Role-Based Access Control (RBAC) system that provides fine-grained permission management based on user roles and responsibilities.
 
 ## Architecture
 

@@ -1,5 +1,5 @@
 -- Migration: Create licenses table
--- This table stores license information for SPHAiRPlatform
+-- This table stores license information for SPHAiRDigital
 -- Licenses expire after 3 months from activation
 
 CREATE TABLE IF NOT EXISTS licenses (
@@ -22,4 +22,4 @@ CREATE INDEX IF NOT EXISTS idx_licenses_expires_at ON licenses(expires_at);
 CREATE INDEX IF NOT EXISTS idx_licenses_is_active ON licenses(is_active);
 
 -- Add comment
-COMMENT ON TABLE licenses IS 'SPHAiRPlatform license information. Licenses expire 3 months from activation.';
+COMMENT ON TABLE licenses IS 'SPHAiRDigital license information. Licenses expire 3 months from activation.';

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getApiBaseUrl } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
+import DataTable from './DataTable';
+import TableSkeleton from './TableSkeleton';
 import './PlatformUsers.css';
 
 function PlatformUsers() {
@@ -197,14 +199,6 @@ function PlatformUsers() {
     setPagination(prev => ({ ...prev, page: newPage }));
   };
 
-  const handleSort = (field) => {
-    setSortConfig(prev => ({
-      field,
-      direction: prev.field === field && prev.direction === 'ASC' ? 'DESC' : 'ASC'
-    }));
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
   const hasActiveFilters = () => {
     return search || filters.role || filters.organization_id || filters.status || filters.last_login;
   };
@@ -218,7 +212,7 @@ function PlatformUsers() {
       if (filters.organization_id) params.append('organization_id', filters.organization_id);
       if (filters.status) params.append('status', filters.status);
       if (filters.last_login) params.append('last_login', filters.last_login);
-      
+
       // Export all matching users (no pagination)
       params.append('limit', '10000');
       params.append('page', '1');
@@ -232,13 +226,13 @@ function PlatformUsers() {
       }
 
       const data = await response.json();
-      const exportUsers = data.users || [];
+      const exportData = data.users || [];
 
       // Convert to CSV
       const headers = ['Username', 'Full Name', 'Email', 'Organization', 'Roles', 'Status', 'Last Login', 'Tasks', 'Created'];
       const csvRows = [
         headers.join(','),
-        ...exportUsers.map(user => {
+        ...exportData.map(user => {
           const roles = user.all_roles || user.roles || (user.role ? [user.role] : []);
           const rolesStr = Array.isArray(roles) ? roles.join('; ') : 'N/A';
           return [
@@ -287,24 +281,8 @@ function PlatformUsers() {
     return date.toLocaleDateString();
   };
 
-  const formatRoles = (user) => {
-    // Use all_roles if available (from RBAC), otherwise fall back to roles or role
-    const roles = user.all_roles || user.roles || (user.role ? [user.role] : []);
-    if (!Array.isArray(roles)) return 'N/A';
-    if (roles.length === 0) return 'N/A';
-    if (roles.length === 1) {
-      const role = roles[0];
-      const roleObj = availableRoles.find(r => r.role_code === role);
-      return roleObj ? roleObj.role_name : role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    }
-    // Multiple roles - show first role + count
-    const firstRole = roles[0];
-    const roleObj = availableRoles.find(r => r.role_code === firstRole);
-    const firstRoleName = roleObj ? roleObj.role_name : firstRole.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    return `${firstRoleName} (+${roles.length - 1})`;
-  };
-
-  const handleRowClick = (userId) => {
+  const handleRowClick = (row) => {
+    const userId = row.id;
     if (expandedUserId === userId) {
       setExpandedUserId(null);
     } else {
@@ -318,15 +296,12 @@ function PlatformUsers() {
 
   const loadUserDetails = async (userId) => {
     try {
-      // For now, we'll use the data we already have
-      // In the future, we could add a dedicated endpoint for user details
       const user = users.find(u => u.id === userId);
       if (user) {
         setUserDetails(prev => ({
           ...prev,
           [userId]: {
             ...user,
-            // Calculate additional stats from existing data
             completedTasks: user.completed_task_count || 0,
             totalTasks: user.task_count || 0,
             pendingTasks: (user.task_count || 0) - (user.completed_task_count || 0)
@@ -338,10 +313,248 @@ function PlatformUsers() {
     }
   };
 
+  const formatNumber = (num) => {
+    return new Intl.NumberFormat().format(num);
+  };
+
+  // Define columns for DataTable
+  const tableColumns = useMemo(() => [
+    {
+      key: 'username',
+      label: 'Username',
+      sortable: true
+    },
+    {
+      key: 'full_name',
+      label: 'Full Name',
+      sortable: true,
+      render: (val) => val || '-'
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      sortable: true
+    },
+    {
+      key: 'organization_name',
+      label: 'Organization',
+      sortable: false,
+      render: (val, row) => {
+        if (val) {
+          return (
+            <span
+              className="org-link"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/platform/organizations/${row.organization_id}/settings`);
+              }}
+              title="View organization"
+            >
+              {val}
+            </span>
+          );
+        }
+        return <span className="no-org">No Organization</span>;
+      }
+    },
+    {
+      key: 'roles',
+      label: 'Roles',
+      sortable: false,
+      render: (_val, row) => {
+        const roles = row.all_roles || row.roles || (row.role ? [row.role] : []);
+        if (!Array.isArray(roles) || roles.length === 0) {
+          return <span className="role-badge">N/A</span>;
+        }
+        return (
+          <div className="roles-container">
+            {roles.slice(0, 2).map((role, idx) => {
+              const roleObj = availableRoles.find(r => r.role_code === role);
+              const roleName = roleObj
+                ? roleObj.role_name
+                : role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              return (
+                <span key={idx} className="role-badge" title={role}>
+                  {roleName}
+                </span>
+              );
+            })}
+            {roles.length > 2 && (
+              <span className="role-badge-more" title={roles.slice(2).join(', ')}>
+                +{roles.length - 2}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      key: 'is_active',
+      label: 'Status',
+      sortable: true,
+      render: (val) => (
+        <span className={val ? 'status-active' : 'status-inactive'}>
+          {val ? 'Active' : 'Inactive'}
+        </span>
+      )
+    },
+    {
+      key: 'last_login',
+      label: 'Last Login',
+      sortable: true,
+      render: (val) => (
+        <span className={val ? 'last-login' : 'last-login-never'}>
+          {formatDate(val)}
+        </span>
+      )
+    },
+    {
+      key: 'task_count',
+      label: 'Tasks',
+      sortable: false,
+      render: (val) => val || 0
+    },
+    {
+      key: 'created_at',
+      label: 'Created',
+      sortable: true,
+      render: (val) => val ? new Date(val).toLocaleDateString() : '-'
+    }
+  ], [availableRoles, navigate]);
+
+  // Render expanded user detail panel
+  const renderExpandedDetail = (user) => {
+    if (!user) return null;
+    return (
+      <div className="user-detail-panel">
+        <div className="user-detail-header">
+          <h3>User Details: {user.full_name || user.username}</h3>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => setExpandedUserId(null)}
+          >
+            Close
+          </button>
+        </div>
+        <div className="user-detail-content">
+          <div className="user-detail-section">
+            <h4>Basic Information</h4>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="detail-label">Username:</span>
+                <span className="detail-value">{user.username}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Email:</span>
+                <span className="detail-value">{user.email}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Full Name:</span>
+                <span className="detail-value">{user.full_name || 'Not set'}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Organization:</span>
+                <span className="detail-value">
+                  {user.organization_name || 'No Organization'}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Status:</span>
+                <span className={user.is_active ? 'status-active' : 'status-inactive'}>
+                  {user.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Created:</span>
+                <span className="detail-value">
+                  {new Date(user.created_at).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="user-detail-section">
+            <h4>Roles</h4>
+            <div className="roles-container">
+              {(() => {
+                const roles = user.all_roles || user.roles || (user.role ? [user.role] : []);
+                if (!Array.isArray(roles) || roles.length === 0) {
+                  return <span className="role-badge">No roles assigned</span>;
+                }
+                return roles.map((role, idx) => {
+                  const roleObj = availableRoles.find(r => r.role_code === role);
+                  const roleName = roleObj
+                    ? roleObj.role_name
+                    : role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                  return (
+                    <span key={idx} className="role-badge" title={role}>
+                      {roleName}
+                    </span>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+
+          <div className="user-detail-section">
+            <h4>Activity Statistics</h4>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="detail-label">Total Tasks:</span>
+                <span className="detail-value">{user.task_count || 0}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Completed Tasks:</span>
+                <span className="detail-value">{user.completed_task_count || 0}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Pending Tasks:</span>
+                <span className="detail-value">
+                  {(user.task_count || 0) - (user.completed_task_count || 0)}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Last Login:</span>
+                <span className={`detail-value ${user.last_login ? '' : 'last-login-never'}`}>
+                  {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="user-detail-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                navigate(`/tenant/users`);
+              }}
+            >
+              Edit
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                navigate(`/tenant/tasks`);
+              }}
+            >
+              Tasks
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading && users.length === 0) {
     return (
       <div className="platform-users-container">
-        <div className="loading">Loading users...</div>
+        <div className="platform-users-header">
+          <h1>Platform Users</h1>
+          <p className="platform-subtitle">All users across all organizations</p>
+        </div>
+        <div className="users-table-container">
+          <TableSkeleton rows={8} columns={9} />
+        </div>
       </div>
     );
   }
@@ -353,10 +566,6 @@ function PlatformUsers() {
       </div>
     );
   }
-
-  const formatNumber = (num) => {
-    return new Intl.NumberFormat().format(num);
-  };
 
   return (
     <div className="platform-users-container">
@@ -403,7 +612,6 @@ function PlatformUsers() {
         <button
           className="btn btn-primary"
           onClick={() => {
-            // Export functionality will be added in next step
             exportUsers();
           }}
         >
@@ -507,260 +715,29 @@ function PlatformUsers() {
 
       {/* Users Table */}
       <div className="users-table-container">
-        {users.length === 0 ? (
-          <div className="no-data">No users found</div>
+        {loading ? (
+          <TableSkeleton rows={8} columns={9} />
         ) : (
           <>
-            <table className="users-table">
-              <thead>
-                <tr>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('username')}
-                  >
-                    Username
-                    {sortConfig.field === 'username' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('full_name')}
-                  >
-                    Full Name
-                    {sortConfig.field === 'full_name' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('email')}
-                  >
-                    Email
-                    {sortConfig.field === 'email' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                  <th>Organization</th>
-                  <th>Roles</th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('is_active')}
-                  >
-                    Status
-                    {sortConfig.field === 'is_active' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('last_login')}
-                  >
-                    Last Login
-                    {sortConfig.field === 'last_login' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                  <th>Tasks</th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('created_at')}
-                  >
-                    Created
-                    {sortConfig.field === 'created_at' && (
-                      <span className="sort-indicator">{sortConfig.direction === 'ASC' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(user => (
-                  <React.Fragment key={user.id}>
-                    <tr 
-                      className={expandedUserId === user.id ? 'expanded' : ''}
-                      onClick={() => handleRowClick(user.id)}
-                    >
-                      <td>{user.username}</td>
-                      <td>{user.full_name || '-'}</td>
-                      <td>{user.email}</td>
-                      <td>
-                        {user.organization_name ? (
-                          <span 
-                            className="org-link"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/platform/organizations/${user.organization_id}/settings`);
-                            }}
-                            title="View organization"
-                          >
-                            {user.organization_name}
-                          </span>
-                        ) : (
-                          <span className="no-org">No Organization</span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="roles-container">
-                          {(() => {
-                            const roles = user.all_roles || user.roles || (user.role ? [user.role] : []);
-                            if (!Array.isArray(roles) || roles.length === 0) {
-                              return <span className="role-badge">N/A</span>;
-                            }
-                            return roles.slice(0, 2).map((role, idx) => {
-                              const roleObj = availableRoles.find(r => r.role_code === role);
-                              const roleName = roleObj ? roleObj.role_name : role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                              return (
-                                <span key={idx} className="role-badge" title={role}>
-                                  {roleName}
-                                </span>
-                              );
-                            }).concat(
-                              roles.length > 2 ? [<span key="more" className="role-badge-more" title={roles.slice(2).join(', ')}>+{roles.length - 2}</span>] : []
-                            );
-                          })()}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={user.is_active ? 'status-active' : 'status-inactive'}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="last-login-cell">
-                        <span className={user.last_login ? 'last-login' : 'last-login-never'}>
-                          {formatDate(user.last_login)}
-                        </span>
-                      </td>
-                      <td>{user.task_count || 0}</td>
-                      <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                    </tr>
-                    {expandedUserId === user.id && (
-                      <tr className="user-detail-row">
-                        <td colSpan="9">
-                          <div className="user-detail-panel">
-                            <div className="user-detail-header">
-                              <h3>User Details: {user.full_name || user.username}</h3>
-                              <button
-                                className="btn btn-sm btn-secondary"
-                                onClick={() => setExpandedUserId(null)}
-                              >
-                                Close
-                              </button>
-                            </div>
-                            <div className="user-detail-content">
-                              <div className="user-detail-section">
-                                <h4>Basic Information</h4>
-                                <div className="detail-grid">
-                                  <div className="detail-item">
-                                    <span className="detail-label">Username:</span>
-                                    <span className="detail-value">{user.username}</span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Email:</span>
-                                    <span className="detail-value">{user.email}</span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Full Name:</span>
-                                    <span className="detail-value">{user.full_name || 'Not set'}</span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Organization:</span>
-                                    <span className="detail-value">
-                                      {user.organization_name || 'No Organization'}
-                                    </span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Status:</span>
-                                    <span className={user.is_active ? 'status-active' : 'status-inactive'}>
-                                      {user.is_active ? 'Active' : 'Inactive'}
-                                    </span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Created:</span>
-                                    <span className="detail-value">
-                                      {new Date(user.created_at).toLocaleString()}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
+            <DataTable
+              columns={tableColumns}
+              data={users}
+              defaultSortKey="created_at"
+              defaultSortDir="desc"
+              pageSize={25}
+              emptyIcon="bi-people"
+              emptyMessage="No users found"
+              onRowClick={handleRowClick}
+            />
 
-                              <div className="user-detail-section">
-                                <h4>Roles</h4>
-                                <div className="roles-container">
-                                  {(() => {
-                                    const roles = user.all_roles || user.roles || (user.role ? [user.role] : []);
-                                    if (!Array.isArray(roles) || roles.length === 0) {
-                                      return <span className="role-badge">No roles assigned</span>;
-                                    }
-                                    return roles.map((role, idx) => {
-                                      const roleObj = availableRoles.find(r => r.role_code === role);
-                                      const roleName = roleObj ? roleObj.role_name : role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                                      return (
-                                        <span key={idx} className="role-badge" title={role}>
-                                          {roleName}
-                                        </span>
-                                      );
-                                    });
-                                  })()}
-                                </div>
-                              </div>
+            {/* Expanded Detail Row (rendered below the table) */}
+            {expandedUserId && (
+              <div className="user-detail-row-standalone">
+                {renderExpandedDetail(users.find(u => u.id === expandedUserId))}
+              </div>
+            )}
 
-                              <div className="user-detail-section">
-                                <h4>Activity Statistics</h4>
-                                <div className="detail-grid">
-                                  <div className="detail-item">
-                                    <span className="detail-label">Total Tasks:</span>
-                                    <span className="detail-value">{user.task_count || 0}</span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Completed Tasks:</span>
-                                    <span className="detail-value">{user.completed_task_count || 0}</span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Pending Tasks:</span>
-                                    <span className="detail-value">
-                                      {(user.task_count || 0) - (user.completed_task_count || 0)}
-                                    </span>
-                                  </div>
-                                  <div className="detail-item">
-                                    <span className="detail-label">Last Login:</span>
-                                    <span className={`detail-value ${user.last_login ? '' : 'last-login-never'}`}>
-                                      {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="user-detail-actions">
-                                <button
-                                  className="btn btn-primary btn-sm"
-                                  onClick={() => {
-                                    // Navigate to user edit page or open edit modal
-                                    navigate(`/tenant/users`);
-                                  }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => {
-                                    // View user's tasks
-                                    navigate(`/tenant/tasks`);
-                                  }}
-                                >
-                                  Tasks
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Pagination */}
+            {/* Server-side Pagination (for navigating between server pages) */}
             {pagination.totalPages > 1 && (
               <div className="pagination">
                 <button
@@ -768,17 +745,17 @@ function PlatformUsers() {
                   onClick={() => handlePageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
                 >
-                  Previous
+                  Previous Page
                 </button>
                 <span className="pagination-info">
-                  Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+                  Server Page {pagination.page} of {pagination.totalPages} ({pagination.total} total users)
                 </span>
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={pagination.page >= pagination.totalPages}
                 >
-                  Next
+                  Next Page
                 </button>
               </div>
             )}

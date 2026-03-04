@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const { validateUploadedFile } = require('../utils/fileValidator');
 const logger = require('../utils/logger');
 const { requireAuth } = require('../middleware/auth');
+const { getDb } = require('../middleware/tenantContext');
 const {
   getOrganizationSlugFromRequest,
   getStoragePath,
@@ -126,10 +127,11 @@ module.exports = (pool) => {
       }
 
       // Get organization slug from request context
+      const db = getDb(req, pool);
       let organizationSlug = await getOrganizationSlugFromRequest(req, pool);
       if (!organizationSlug) {
         // Try to get from task's organization_id as fallback
-        const taskResult = await pool.query(
+        const taskResult = await db.query(
           'SELECT organization_id FROM tasks WHERE id = $1',
           [task_id]
         );
@@ -145,7 +147,7 @@ module.exports = (pool) => {
       }
 
       // Save image record to database
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO failed_item_images (
           task_id, checklist_response_id, item_id, section_id,
           image_path, image_filename, comment, uploaded_by
@@ -185,7 +187,8 @@ module.exports = (pool) => {
   // Get images for a task
   router.get('/task/:taskId', requireAuth, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         'SELECT * FROM failed_item_images WHERE task_id = $1 ORDER BY uploaded_at DESC',
         [req.params.taskId]
       );

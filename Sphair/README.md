@@ -1,11 +1,11 @@
-# SPHAiRPlatform Marketing Website
+# SPHAiRDigital Marketing Website
 
-This is the marketing website for SPHAiRPlatform, a professional centralized digital O&M system for solar power plant maintenance operations.
+This is the marketing website for SPHAiRDigital, a professional centralized digital O&M system for solar power plant maintenance operations.
 
 ## Structure
 
-- **sphairplatform.com** → Marketing website (this folder)
-- **sphairplatform.com/app** → Actual software application
+- **sphairdigital.com** → Marketing website (this folder)
+- **sphairdigital.com/app** → Actual software application
 
 ## Pages
 
@@ -53,7 +53,7 @@ If you have the Live Server extension in VS Code:
 ## Content
 
 The website focuses on:
-- SPHAiRPlatform's value proposition
+- SPHAiRDigital's value proposition
 - Key features (Dynamic Checklists, Automated CM Generation, Audit Trails, etc.)
 - Services (PM, CM, Plant Map, Inventory, etc.)
 - Pricing plans (Starter, Professional, Enterprise)

@@ -19,7 +19,8 @@
  * Platform routes are for system-wide administration
  */
 function isPlatformRoute(req) {
-  return req.path && req.path.startsWith('/api/platform/');
+  const url = req.originalUrl || req.path || '';
+  return url.startsWith('/api/platform/') || url.startsWith('/api/platform');
 }
 
 /**

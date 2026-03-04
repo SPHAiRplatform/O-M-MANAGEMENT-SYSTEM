@@ -1,7 +1,7 @@
 /**
-* SPHAiRPlatform Marketing Website
+* SPHAiRDigital Marketing Website
 * Professional digital O&M system for solar power plant maintenance operations
-* Copyright © SPHAiRPlatform. All Rights Reserved.
+* Copyright © SPHAiRDigital. All Rights Reserved.
 */
 
 (function() {
@@ -124,33 +124,33 @@
   new PureCounter();
 
   /*
-   * Pricing Toggle
+   * Pricing Toggle (Monthly/Yearly)
    */
-
   const pricingContainers = document.querySelectorAll('.pricing-toggle-container');
 
   pricingContainers.forEach(function(container) {
     const pricingSwitch = container.querySelector('.pricing-toggle input[type="checkbox"]');
-    const monthlyText = container.querySelector('.monthly');
-    const yearlyText = container.querySelector('.yearly');
+    const monthlyLabel = container.querySelector('.monthly');
+    const yearlyLabel = container.querySelector('.yearly');
 
-    pricingSwitch.addEventListener('change', function() {
-      const pricingItems = container.querySelectorAll('.pricing-item');
+    if (pricingSwitch) {
+      pricingSwitch.addEventListener('change', function() {
+        const monthlyPrices = document.querySelectorAll('.price-monthly');
+        const yearlyPrices = document.querySelectorAll('.price-yearly');
 
-      if (this.checked) {
-        monthlyText.classList.remove('active');
-        yearlyText.classList.add('active');
-        pricingItems.forEach(item => {
-          item.classList.add('yearly-active');
-        });
-      } else {
-        monthlyText.classList.add('active');
-        yearlyText.classList.remove('active');
-        pricingItems.forEach(item => {
-          item.classList.remove('yearly-active');
-        });
-      }
-    });
+        if (this.checked) {
+          monthlyLabel.classList.remove('active');
+          yearlyLabel.classList.add('active');
+          monthlyPrices.forEach(p => p.style.display = 'none');
+          yearlyPrices.forEach(p => p.style.display = 'inline');
+        } else {
+          monthlyLabel.classList.add('active');
+          yearlyLabel.classList.remove('active');
+          monthlyPrices.forEach(p => p.style.display = 'inline');
+          yearlyPrices.forEach(p => p.style.display = 'none');
+        }
+      });
+    }
   });
 
   /**

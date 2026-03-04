@@ -163,21 +163,15 @@ function PasswordChangeModal({ isOpen, onClose, onSuccess }) {
     <div className="modal-overlay" style={{ pointerEvents: 'auto' }}>
       <div className="modal-content password-change-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Change Your Password</h2>
-          {/* Remove close button - password change is mandatory */}
+          <h2><i className="bi bi-shield-lock" style={{ marginRight: 8 }}></i>Change Password</h2>
         </div>
 
         <div className="modal-body">
-          <div className="alert alert-warning" style={{ marginBottom: '20px' }}>
-            <strong>Security Notice:</strong> You are using the default password. 
-            You must change it to a strong, unique password before you can access the application.
-          </div>
+          <p className="pwd-notice">Please set a new password to continue.</p>
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="current_password">
-                Current Password <span className="required">*</span>
-              </label>
+              <label htmlFor="current_password">Current Password</label>
               <input
                 type="password"
                 id="current_password"
@@ -194,9 +188,7 @@ function PasswordChangeModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="new_password">
-                New Password <span className="required">*</span>
-              </label>
+              <label htmlFor="new_password">New Password</label>
               <input
                 type="password"
                 id="new_password"
@@ -211,53 +203,31 @@ function PasswordChangeModal({ isOpen, onClose, onSuccess }) {
                 <span className="error-message">{errors.new_password}</span>
               )}
 
-              {/* Password Strength Indicator */}
               {formData.new_password && (
-                <div className="password-strength" style={{ marginTop: '10px' }}>
+                <div className="password-strength" style={{ marginTop: 8 }}>
                   <div className="strength-bar-container">
                     <div
                       className="strength-bar"
                       style={{
                         width: `${(passwordStrength.score / 6) * 100}%`,
                         backgroundColor: strengthInfo.color,
-                        height: '6px',
-                        borderRadius: '3px',
-                        transition: 'all 0.3s ease'
                       }}
                     />
                   </div>
-                  <div className="strength-label" style={{ marginTop: '5px', fontSize: '13px', color: strengthInfo.color }}>
-                    <strong>Strength: {strengthInfo.label}</strong>
-                  </div>
+                  <span className="strength-label" style={{ color: strengthInfo.color }}>
+                    {strengthInfo.label}
+                  </span>
                   {passwordStrength.feedback.length > 0 && (
-                    <div className="strength-feedback" style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-                      <strong>Requirements:</strong>
-                      <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
-                        {passwordStrength.feedback.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    <span className="strength-hints">
+                      {' — Need: ' + passwordStrength.feedback.join(', ')}
+                    </span>
                   )}
                 </div>
               )}
-
-              <div className="password-requirements" style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>
-                <strong>Password must contain:</strong>
-                <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
-                  <li>At least 8 characters (12+ recommended)</li>
-                  <li>One uppercase letter (A-Z)</li>
-                  <li>One lowercase letter (a-z)</li>
-                  <li>One number (0-9)</li>
-                  <li>One special character (!@#$%^&*...)</li>
-                </ul>
-              </div>
             </div>
 
             <div className="form-group">
-              <label htmlFor="confirm_password">
-                Confirm New Password <span className="required">*</span>
-              </label>
+              <label htmlFor="confirm_password">Confirm Password</label>
               <input
                 type="password"
                 id="confirm_password"
@@ -274,22 +244,17 @@ function PasswordChangeModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             {errors.submit && (
-              <div className="alert alert-error" style={{ marginTop: '15px' }}>
-                {errors.submit}
-              </div>
+              <div className="alert alert-error">{errors.submit}</div>
             )}
 
-            <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              {/* Remove Cancel button - password change is mandatory */}
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={submitting || passwordStrength.score < 3}
-                style={{ width: '100%' }}
-              >
-                {submitting ? 'Changing...' : 'Change'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={submitting || passwordStrength.score < 3}
+              style={{ width: '100%' }}
+            >
+              {submitting ? 'Changing...' : 'Change Password'}
+            </button>
           </form>
         </div>
       </div>

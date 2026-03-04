@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth, requirePasswordChange, requireAdmin, requireSuperAdmin, isSuperAdmin } = require('../middleware/auth');
 const { validateCreateUser, validateUpdateUser } = require('../middleware/inputValidation');
 const { requireFeature } = require('../middleware/requireFeature');
+const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
 // Rate limiting removed for frequent use
 // const { sensitiveOperationLimiter } = require('../middleware/rateLimiter');
 
@@ -315,14 +316,17 @@ module.exports = (pool) => {
   // Get user by ID
   router.get('/:id', requireAdmin, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       // Check if current user is system_owner
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
                            req.session.role === 'system_owner' ||
                            req.session.roles?.includes('super_admin') ||
                            req.session.role === 'super_admin';
-      
+
       // Check if RBAC tables exist
-      const rbacCheck = await pool.query(`
+      const rbacCheck = await db.query(`
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'user_roles'
@@ -336,7 +340,7 @@ module.exports = (pool) => {
         // Check if the requested user has system_owner role
         if (!isSystemOwner) {
           // Operations Administrator: Check if user has system_owner role
-          const roleCheck = await pool.query(`
+          const roleCheck = await db.query(`
             SELECT COUNT(*) as count
             FROM user_roles ur
             JOIN roles r ON ur.role_id = r.id
@@ -408,7 +412,7 @@ module.exports = (pool) => {
         }
       }
 
-      const result = await pool.query(query, [req.params.id]);
+      const result = await db.query(query, [req.params.id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -497,22 +501,15 @@ module.exports = (pool) => {
       }
 
       // Use default password from environment if no password provided (super admin only)
-      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'witkop123';
       const useDefaultPassword = !password || password.trim() === '';
+      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
       
       if (!useDefaultPassword && password.length < 6) {
         return res.status(400).json({ error: 'Password must be at least 6 characters long' });
       }
 
-      // Handle roles: support both 'role' (single) and 'roles' (array)
-      let userRoles = ['technician']; // Default
-      if (roles && Array.isArray(roles) && roles.length > 0) {
-        userRoles = roles;
-      } else if (role) {
-        userRoles = [role];
-      }
-
       // Validate roles - support both legacy and RBAC roles
+      // Note: userRoles was already extracted from req.body above (line 471)
       const validRoles = [
         // Legacy roles
         'technician', 'supervisor', 'admin', 'super_admin',
@@ -566,12 +563,12 @@ module.exports = (pool) => {
       }
 
       // Check if RBAC tables exist
-      const rbacCheck = await pool.query(`
-        SELECT table_name 
-        FROM information_schema.tables 
+      const rbacCheck = await db.query(`
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = 'user_roles'
       `);
-      
+
       const hasRBAC = rbacCheck.rows.length > 0;
 
       // Hash password (use default if not provided)
@@ -596,10 +593,10 @@ module.exports = (pool) => {
       // Assign roles in user_roles table if RBAC exists
       if (hasRBAC) {
         for (const roleCode of mappedRoles) {
-          const roleResult = await pool.query('SELECT id FROM roles WHERE role_code = $1', [roleCode]);
+          const roleResult = await db.query('SELECT id FROM roles WHERE role_code = $1', [roleCode]);
           if (roleResult.rows.length > 0) {
             const roleId = roleResult.rows[0].id;
-            await pool.query(
+            await db.query(
               `INSERT INTO user_roles (user_id, role_id, assigned_at, assigned_by)
                VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
                ON CONFLICT (user_id, role_id) DO NOTHING`,
@@ -608,7 +605,7 @@ module.exports = (pool) => {
           }
         }
       }
-      
+
       // Parse roles JSONB for response
       if (user.roles && typeof user.roles === 'string') {
         try {
@@ -620,6 +617,7 @@ module.exports = (pool) => {
         user.roles = mappedRoles;
       }
 
+      logAudit(pool, req, { action: AUDIT_ACTIONS.USER_CREATED, entityType: AUDIT_ENTITY_TYPES.USER, entityId: user.id, details: { username: user.username } }).catch(() => {});
       res.status(201).json({
         message: 'User created successfully',
         user: user
@@ -638,6 +636,9 @@ module.exports = (pool) => {
   // Rate limiting removed for frequent use
   router.put('/:id', requireAdmin, validateUpdateUser, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const { id } = req.params;
       const { username, email, full_name, role, roles, is_active, password, organization_id } = req.body;
 
@@ -684,22 +685,22 @@ module.exports = (pool) => {
         }
         
         // Check if RBAC tables exist and update user_roles
-        const rbacCheck = await pool.query(`
-          SELECT table_name 
-          FROM information_schema.tables 
+        const rbacCheck = await db.query(`
+          SELECT table_name
+          FROM information_schema.tables
           WHERE table_schema = 'public' AND table_name = 'user_roles'
         `);
-        
+
         if (rbacCheck.rows.length > 0) {
           // Delete existing roles
-          await pool.query('DELETE FROM user_roles WHERE user_id = $1', [id]);
-          
+          await db.query('DELETE FROM user_roles WHERE user_id = $1', [id]);
+
           // Insert new roles
           for (const roleCode of mappedRoles) {
-            const roleResult = await pool.query('SELECT id FROM roles WHERE role_code = $1', [roleCode]);
+            const roleResult = await db.query('SELECT id FROM roles WHERE role_code = $1', [roleCode]);
             if (roleResult.rows.length > 0) {
               const roleId = roleResult.rows[0].id;
-              await pool.query(
+              await db.query(
                 `INSERT INTO user_roles (user_id, role_id, assigned_at, assigned_by)
                  VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
                  ON CONFLICT (user_id, role_id) DO NOTHING`,
@@ -771,8 +772,6 @@ module.exports = (pool) => {
         }
         
         // Verify organization exists and is active
-        const { getDb } = require('../middleware/tenantContext');
-        const db = getDb(req, pool);
         const orgCheck = await db.query('SELECT id, name, is_active FROM organizations WHERE id = $1', [organization_id]);
         if (orgCheck.rows.length === 0) {
           return res.status(400).json({ error: 'Invalid organization_id provided' });
@@ -825,8 +824,6 @@ module.exports = (pool) => {
                                profile_image, is_active, organization_id, created_at, last_login`;
 
       // Use getDb for RLS-aware queries
-      const { getDb } = require('../middleware/tenantContext');
-      const db = getDb(req, pool);
       const result = await db.query(query, values);
 
       if (result.rows.length === 0) {
@@ -862,6 +859,9 @@ module.exports = (pool) => {
   // Deactivate user (super_admin only) - soft delete by setting is_active to false
   router.patch('/:id/deactivate', requireSuperAdmin, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const { id } = req.params;
 
       // Prevent deactivating yourself
@@ -870,7 +870,7 @@ module.exports = (pool) => {
       }
 
       // Soft delete by setting is_active to false
-      const result = await pool.query(
+      const result = await db.query(
         'UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, username',
         [id]
       );
@@ -878,7 +878,8 @@ module.exports = (pool) => {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
-
+      const target = result.rows[0];
+      logAudit(pool, req, { action: AUDIT_ACTIONS.USER_DEACTIVATED, entityType: AUDIT_ENTITY_TYPES.USER, entityId: target.id, details: { username: target.username } }).catch(() => {});
       res.json({ message: 'User deactivated successfully' });
     } catch (error) {
       console.error('Error deactivating user:', error);
@@ -889,6 +890,9 @@ module.exports = (pool) => {
   // Delete user (admin only) - hard delete from database
   router.delete('/:id', requireAdmin, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const { id } = req.params;
 
       // Prevent deleting yourself
@@ -897,7 +901,7 @@ module.exports = (pool) => {
       }
 
       // Hard delete - remove user from database
-      const result = await pool.query(
+      const result = await db.query(
         'DELETE FROM users WHERE id = $1 RETURNING id, username',
         [id]
       );
@@ -905,7 +909,8 @@ module.exports = (pool) => {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
-
+      const target = result.rows[0];
+      logAudit(pool, req, { action: AUDIT_ACTIONS.USER_DELETED, entityType: AUDIT_ENTITY_TYPES.USER, entityId: target.id, details: { username: target.username } }).catch(() => {});
       res.json({ message: 'User deleted successfully' });
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -917,12 +922,15 @@ module.exports = (pool) => {
   // Get current user's profile
   router.get('/profile/me', requireAuth, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const hasRolesColumn = await checkRolesColumn();
-      const rolesSelect = hasRolesColumn 
+      const rolesSelect = hasRolesColumn
         ? 'COALESCE(roles, jsonb_build_array(role)) as roles'
         : 'jsonb_build_array(role) as roles';
-      
-      const result = await pool.query(
+
+      const result = await db.query(
         `SELECT id, username, email, full_name, role,
                 ${rolesSelect},
                 profile_image, is_active, created_at, last_login 
@@ -957,6 +965,9 @@ module.exports = (pool) => {
   // Update current user's profile (name, surname, email, username, password)
   router.put('/profile/me', requireAuth, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const { full_name, email, username, password, current_password } = req.body;
       const userId = req.session.userId;
 
@@ -967,7 +978,7 @@ module.exports = (pool) => {
         }
 
         // Verify current password
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT password_hash FROM users WHERE id = $1',
           [userId]
         );
@@ -1009,7 +1020,7 @@ module.exports = (pool) => {
 
       if (username !== undefined) {
         // Check if username is already taken by another user
-        const usernameCheck = await pool.query(
+        const usernameCheck = await db.query(
           'SELECT id FROM users WHERE username = $1 AND id != $2',
           [username.trim(), userId]
         );
@@ -1041,12 +1052,12 @@ module.exports = (pool) => {
         ? 'COALESCE(roles, jsonb_build_array(role)) as roles'
         : 'jsonb_build_array(role) as roles';
       
-      const result = await pool.query(
-        `UPDATE users 
-         SET ${updates.join(', ')} 
+      const result = await db.query(
+        `UPDATE users
+         SET ${updates.join(', ')}
          WHERE id = $${paramCount}
-         RETURNING id, username, email, full_name, role, 
-                   ${rolesSelect}, 
+         RETURNING id, username, email, full_name, role,
+                   ${rolesSelect},
                    profile_image, is_active, created_at, last_login`,
         values
       );
@@ -1148,13 +1159,16 @@ module.exports = (pool) => {
   // Delete profile image
   router.delete('/profile/me/avatar', requireAuth, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       const userId = req.session.userId;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
       // Get old profile image to delete it
-      const oldUserResult = await pool.query(
+      const oldUserResult = await db.query(
         'SELECT profile_image FROM users WHERE id = $1',
         [userId]
       );
@@ -1166,7 +1180,7 @@ module.exports = (pool) => {
       const oldProfileImage = oldUserResult.rows[0]?.profile_image;
 
       // Update user's profile_image to null
-      const result = await pool.query(
+      const result = await db.query(
         `UPDATE users 
          SET profile_image = NULL, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $1 
@@ -1239,10 +1253,13 @@ module.exports = (pool) => {
     });
   }, async (req, res) => {
     try {
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+
       console.log('[PROFILE IMAGE] Upload request received');
       console.log('[PROFILE IMAGE] Session userId:', req.session?.userId);
       console.log('[PROFILE IMAGE] File:', req.file ? { filename: req.file.filename, size: req.file.size } : 'No file');
-      
+
       if (!req.file) {
         console.error('[PROFILE IMAGE] No file provided');
         return res.status(400).json({ error: 'No image file provided' });
@@ -1273,7 +1290,7 @@ module.exports = (pool) => {
       console.log('[PROFILE IMAGE] Updating user profile_image:', filePath);
 
       // Get old profile image to delete it later
-      const oldUserResult = await pool.query(
+      const oldUserResult = await db.query(
         'SELECT profile_image FROM users WHERE id = $1',
         [userId]
       );
@@ -1281,7 +1298,7 @@ module.exports = (pool) => {
       const oldProfileImage = oldUserResult.rows[0]?.profile_image;
 
       // Update user's profile_image
-      const result = await pool.query(
+      const result = await db.query(
         `UPDATE users 
          SET profile_image = $1, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $2 

@@ -409,16 +409,14 @@ function ChecklistTemplates() {
                     className="btn btn-secondary" 
                     onClick={addSection}
                     disabled={savingStructure}
-                    style={{ padding: '6px 12px', fontSize: '13px' }}
                     title="Add new section"
                   >
                     Add
                   </button>
-                  <button 
-                    className="btn btn-primary" 
+                  <button
+                    className="btn btn-primary"
                     onClick={handleSaveStructure}
                     disabled={savingStructure}
-                    style={{ padding: '8px 16px', fontSize: '14px' }}
                   >
                     {savingStructure ? 'Saving...' : 'Save'}
                   </button>

@@ -6,6 +6,7 @@ const { requireAdmin } = require('../middleware/auth');
 const { validateString, validateUUID, handleValidationErrors, removeUnexpectedFields } = require('../middleware/inputValidation');
 // Rate limiting removed for frequent use
 // const { sensitiveOperationLimiter } = require('../middleware/rateLimiter');
+const { getDb } = require('../middleware/tenantContext');
 
 function generateSecret() {
   return crypto.randomBytes(32).toString('hex');
@@ -17,7 +18,8 @@ module.exports = (pool) => {
   // List tokens (admin only)
   router.get('/', requireAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT id, name, user_id, role, is_active, created_by, created_at, last_used
          FROM api_tokens
          ORDER BY created_at DESC`
@@ -41,6 +43,7 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { name, role, user_id } = req.body || {};
 
       const targetUserId = user_id || req.session.userId; // default: acts as current admin user
@@ -49,7 +52,7 @@ module.exports = (pool) => {
       const secret = generateSecret();
       const secretHash = await bcrypt.hash(secret, 10);
 
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO api_tokens (name, user_id, role, secret_hash, created_by)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, user_id, role, is_active, created_at`,
@@ -70,7 +73,8 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `UPDATE api_tokens SET is_active = false WHERE id = $1 RETURNING id, name, is_active`,
         [req.params.id]
       );

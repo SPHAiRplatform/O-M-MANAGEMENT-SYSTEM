@@ -3,6 +3,7 @@ import { getInventoryItems, adjustInventory, downloadInventoryExcel, getSparesUs
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
+import './Inventory.css';
 
 function Inventory() {
   const { isAdmin, user, loading: authLoading } = useAuth();
@@ -210,7 +211,7 @@ function Inventory() {
   if (loading && viewMode === 'inventory') return <div className="loading">Loading inventory...</div>;
 
   return (
-    <div>
+    <div className="inventory-container">
       <ErrorAlert
         error={alertError}
         onClose={() => setAlertError(null)}
@@ -221,21 +222,21 @@ function Inventory() {
         onClose={() => setAlertSuccess(null)}
         title="Success"
       />
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
+      <div className="inventory-header page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
         <h2 className="page-title" style={{ margin: 0 }}>Inventory Count</h2>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '4px', border: '1px solid var(--md-border)', borderRadius: '6px', padding: '2px' }}>
+          <div style={{ display: 'flex', gap: '2px', border: '1px solid var(--md-border)', borderRadius: '6px', padding: '2px' }}>
             <button
               className={`btn btn-sm ${viewMode === 'inventory' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setViewMode('inventory')}
-              style={{ minWidth: '85px', padding: '6px 12px', fontSize: '13px' }}
+              style={{ padding: '5px 10px', fontSize: '12px' }}
             >
-              Inventory
+              Stock
             </button>
             <button
               className={`btn btn-sm ${viewMode === 'usage' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setViewMode('usage')}
-              style={{ minWidth: '85px', padding: '6px 12px', fontSize: '13px' }}
+              style={{ padding: '5px 10px', fontSize: '12px' }}
             >
               Usage
             </button>
@@ -245,16 +246,16 @@ function Inventory() {
               <button 
                 className="btn btn-sm btn-primary" 
                 onClick={() => setShowAddModal(true)}
-                style={{ padding: '6px 12px', fontSize: '13px' }}
+                style={{ padding: '5px 10px', fontSize: '12px' }}
               >
-                Add New
+                + Add
               </button>
               <button 
                 className="btn btn-sm btn-primary" 
                 onClick={handleDownload}
-                style={{ padding: '6px 12px', fontSize: '13px' }}
+                style={{ padding: '5px 10px', fontSize: '12px' }}
               >
-                Download
+                ↓ Export
               </button>
             </>
           )}
@@ -266,9 +267,9 @@ function Inventory() {
       {viewMode === 'usage' ? (
         <div>
           <div className="card" style={{ marginBottom: '12px', padding: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+            <div className="inventory-usage-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
               <h3 style={{ marginTop: 0, marginBottom: 0, fontSize: '16px', fontWeight: '600' }}>Spares Usage Report</h3>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="inventory-usage-dates" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Start Date:</label>
                   <input
@@ -310,7 +311,7 @@ function Inventory() {
           ) : (
             <div className="card">
               <div className="table-responsive">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="inventory-usage-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #ddd' }}>
                       <th style={{ padding: '12px', textAlign: 'left' }}>Section</th>
@@ -347,24 +348,13 @@ function Inventory() {
       ) : (
         <>
           <div className="card" style={{ marginBottom: '15px' }}>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="inventory-search-row" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by item code, section number or description..."
-            style={{
-              flex: 1,
-              minWidth: '300px',
-              padding: '12px 16px',
-              fontSize: '16px',
-              border: '2px solid #ddd',
-              borderRadius: '6px',
-              outline: 'none',
-              transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => e.currentTarget.style.borderColor = '#007bff'}
-            onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
+            placeholder="Search by item code, section or description..."
+            className="inventory-search-input"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
@@ -417,22 +407,22 @@ function Inventory() {
             50% { opacity: 0.3; }
           }
         `}</style>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 0, fontSize: '18px' }}>Items ({items.length})</h3>
-          <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="inventory-items-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 0, fontSize: '16px' }}>Items ({items.length})</h3>
+          <div style={{ display: 'flex', gap: '4px' }}>
             <button 
               className="btn btn-sm btn-secondary" 
               onClick={expandAll}
-              style={{ padding: '5px 10px', fontSize: '12px' }}
+              style={{ padding: '4px 8px', fontSize: '11px' }}
             >
-              Expand All
+              Expand
             </button>
             <button 
               className="btn btn-sm btn-secondary" 
               onClick={collapseAll}
-              style={{ padding: '5px 10px', fontSize: '12px' }}
+              style={{ padding: '4px 8px', fontSize: '11px' }}
             >
-              Collapse All
+              Collapse
             </button>
           </div>
         </div>
@@ -442,23 +432,8 @@ function Inventory() {
           return (
             <div key={group.section} style={{ marginTop: '12px' }}>
               <div
+                className="inventory-section-header"
                 onClick={() => toggleSection(group.section)}
-                style={{
-                  fontWeight: 600,
-                  color: '#333',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 10px',
-                  background: '#f5f5f5',
-                  borderRadius: '4px',
-                  userSelect: 'none',
-                  fontSize: '14px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e9e9e9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f5f5f5'}
               >
                 <span style={{ fontSize: '12px', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
                   ▶
@@ -477,13 +452,13 @@ function Inventory() {
                     title={`Warning: Some items in this section are below minimum quantity`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    ⚠️
+                    <i className="bi bi-exclamation-triangle"></i>
                   </span>
                 )}
               </div>
               {isExpanded && (
                 <div className="table-responsive">
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <table className="inventory-table-mobile" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #ddd' }}>
                         <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '13px', fontWeight: '600' }}>Location</th>
@@ -524,12 +499,12 @@ function Inventory() {
                         return (
                           <tr key={it.id} style={{ borderBottom: '1px solid #eee', background: rowBackground }}>
                             <td data-label="Location" style={{ padding: '8px 10px', fontSize: '13px', color: '#666', fontFamily: 'monospace' }}>{sectionNumber}</td>
-                            <td style={{ padding: '8px 10px', fontWeight: '600', fontSize: '13px' }}>{it.item_code}</td>
-                            <td style={{ padding: '8px 10px', fontSize: '13px' }}>{it.item_description || '-'}</td>
-                            <td style={{ padding: '8px 10px', fontSize: '13px' }}>{it.min_level ?? 0}</td>
-                            <td style={{ padding: '8px 10px', fontSize: '13px' }}>{it.actual_qty ?? 0}</td>
+                            <td data-label="Item Code" style={{ padding: '8px 10px', fontWeight: '600', fontSize: '13px' }}>{it.item_code}</td>
+                            <td data-label="Description" style={{ padding: '8px 10px', fontSize: '13px' }}>{it.item_description || '-'}</td>
+                            <td data-label="Min Level" style={{ padding: '8px 10px', fontSize: '13px' }}>{it.min_level ?? 0}</td>
+                            <td data-label="Actual Qty" style={{ padding: '8px 10px', fontSize: '13px' }}>{it.actual_qty ?? 0}</td>
                             {isAdmin() && (
-                              <td style={{ padding: '8px 10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <td data-label="Actions" style={{ padding: '8px 10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <button 
                                   className="btn btn-sm btn-secondary" 
                                   onClick={() => {
@@ -591,7 +566,7 @@ function Inventory() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+          <div className="inventory-adjust-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
             <div>
               <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Current Stock</div>
               <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--md-text-dark)' }}>

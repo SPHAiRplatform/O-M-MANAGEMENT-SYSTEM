@@ -7,7 +7,18 @@
       "Bash(find:*)",
       "Bash(psql:*)",
       "Bash(node -e:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(npx react-scripts build)",
+      "Bash(npm ls:*)",
+      "Bash(npm install:*)",
+      "Bash(node -c:*)",
+      "Bash(git rm -f \"client/src/components/BillingDashboard.js\" \"client/src/components/BillingDashboard.css\")",
+      "Bash(powershell -Command \"Remove-Item -Force ''c:\\\\Users\\\\mango\\\\OneDrive\\\\Documents\\\\GitHub\\\\SOLAR-MANAGEMENT-SYSTEM\\\\client\\\\src\\\\components\\\\BillingDashboard.js'', ''c:\\\\Users\\\\mango\\\\OneDrive\\\\Documents\\\\GitHub\\\\SOLAR-MANAGEMENT-SYSTEM\\\\client\\\\src\\\\components\\\\BillingDashboard.css''\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -U postgres -d solar_om_db -f server/db/migrations/add_organization_id_to_tracker_cycles.sql)",
+      "Bash(PGPASSWORD='S0l@r_DB_P@ss_2026!Secure' psql -h localhost -U postgres -d solar_om_db -f server/db/migrations/add_organization_id_to_tracker_cycles.sql)",
+      "Bash(npm run build)",
+      "Bash(xargs head -200)",
+      "Bash(ls -la /c/Users/mango/OneDrive/Documents/GitHub/SOLAR-MANAGEMENT-SYSTEM/server/db/migrations/*.sql)"
     ]
   }
 }

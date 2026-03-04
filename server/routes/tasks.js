@@ -10,6 +10,7 @@ const { requireAuth, requireAdmin, requireSuperAdmin, isSuperAdmin, isAdmin } = 
 const { validateCreateTask } = require('../middleware/inputValidation');
 const { getDb } = require('../middleware/tenantContext');
 const { isSystemOwnerWithoutCompany } = require('../utils/organizationFilter');
+const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -156,9 +157,10 @@ module.exports = (pool) => {
   // Get task by ID
   router.get('/:id', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       // Get task with assigned users
       // Use subquery to avoid JSONB grouping issues
-      const result = await pool.query(`
+      const result = await db.query(`
         WITH task_assignments_agg AS (
           SELECT ta.task_id,
                  COALESCE(
@@ -229,6 +231,7 @@ module.exports = (pool) => {
   // Create task (any authenticated user can create, but only superadmin can set budgeted_hours)
   router.post('/', requireAuth, validateCreateTask, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const {
         checklist_template_id,
         asset_id,
@@ -279,8 +282,26 @@ module.exports = (pool) => {
         finalScheduledDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
       }
 
-      const task_code = `${taskType}-${Date.now()}-${uuidv4().substring(0, 8).toUpperCase()}`;
-      
+      // Short task code: PM-ABBREV-XXXX (template-related, max ~16 chars)
+      let taskCodePrefix = taskType;
+      const templateRow = await db.query(
+        'SELECT template_code, template_name FROM checklist_templates WHERE id = $1',
+        [checklist_template_id]
+      );
+      if (templateRow.rows.length > 0) {
+        const tc = (templateRow.rows[0].template_code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const tn = (templateRow.rows[0].template_name || '').trim();
+        if (tc && tc.length <= 8) {
+          taskCodePrefix = `${taskType}-${tc}`;
+        } else if (tn) {
+          const abbrev = tn.split(/\s+/).map(w => (w[0] || '').toUpperCase()).join('').replace(/[^A-Z0-9]/g, '').slice(0, 6);
+          taskCodePrefix = `${taskType}-${abbrev || 'TASK'}`;
+        } else {
+          taskCodePrefix = `${taskType}-${(tc || 'T').slice(0, 6)}`;
+        }
+      }
+      const task_code = `${taskCodePrefix}-${uuidv4().substring(0, 4).toUpperCase()}`;
+
       // Handle assigned_to - can be single ID, array of IDs, or null
       const assignedUserIds = assigned_to 
         ? (Array.isArray(assigned_to) ? assigned_to : [assigned_to]).filter(id => id)
@@ -294,7 +315,7 @@ module.exports = (pool) => {
       let organizationId = null;
       if (asset_id) {
         // Get organization_id from asset
-        const assetResult = await pool.query(
+        const assetResult = await db.query(
           'SELECT organization_id FROM assets WHERE id = $1',
           [asset_id]
         );
@@ -309,7 +330,7 @@ module.exports = (pool) => {
         organizationId = getOrganizationIdFromRequest(req);
       }
 
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO tasks (
           task_code, checklist_template_id, asset_id, location, assigned_to, task_type, scheduled_date, 
           status, hours_worked, budgeted_hours, assigned_at, organization_id
@@ -335,22 +356,22 @@ module.exports = (pool) => {
       if (assignedUserIds.length > 0) {
         // Insert all assignments
         for (const userId of assignedUserIds) {
-          await pool.query(
-            `INSERT INTO task_assignments (task_id, user_id, assigned_at, assigned_by)
-             VALUES ($1, $2, $3, $4)
+          await db.query(
+            `INSERT INTO task_assignments (task_id, user_id, assigned_at, assigned_by, organization_id)
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (task_id, user_id) DO NOTHING`,
-            [task.id, userId, assignedAt, req.session.userId]
+            [task.id, userId, assignedAt, req.session.userId, organizationId]
           );
         }
         
         // Get asset (if exists) and all assigned users for notifications
         const assetQuery = asset_id 
-          ? pool.query('SELECT asset_name FROM assets WHERE id = $1', [asset_id])
+          ? db.query('SELECT asset_name FROM assets WHERE id = $1', [asset_id])
           : Promise.resolve({ rows: [] });
         
         const [assetResult, usersResult] = await Promise.all([
           assetQuery,
-          pool.query(
+          db.query(
             `SELECT id, full_name, username, email FROM users WHERE id = ANY($1::uuid[])`,
             [assignedUserIds]
           )
@@ -358,7 +379,29 @@ module.exports = (pool) => {
         
         task.asset_name = assetResult.rows[0]?.asset_name;
         task.location = location || null; // Include location in task object
+        if (task.checklist_template_id) {
+          const templateResult = await db.query(
+            'SELECT template_name FROM checklist_templates WHERE id = $1',
+            [task.checklist_template_id]
+          );
+          task.template_name = templateResult.rows[0]?.template_name || null;
+        }
         const assignedUsers = usersResult.rows;
+
+        // Creator display name for notification: "FirstName LastSurname"
+        let creatorDisplayName = '';
+        if (req.session.userId) {
+          const creatorResult = await db.query(
+            'SELECT full_name, username FROM users WHERE id = $1',
+            [req.session.userId]
+          );
+          const full = (creatorResult.rows[0]?.full_name || creatorResult.rows[0]?.username || '').trim();
+          if (full) {
+            const parts = full.split(/\s+/).filter(Boolean);
+            creatorDisplayName = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : parts[0];
+          }
+        }
+        if (!creatorDisplayName) creatorDisplayName = 'Unknown';
         
         // Send notification to all assigned users
         for (const assignedUser of assignedUsers) {
@@ -367,7 +410,8 @@ module.exports = (pool) => {
               ...task,
               asset_name: task.asset_name || location, // Use location if no asset_name
               location: location,
-              assigned_to: assignedUser.id // For notification function compatibility
+              assigned_to: assignedUser.id, // For notification function compatibility
+              creator_display_name: creatorDisplayName
             }, assignedUser);
           } catch (notifError) {
             console.error(`Error sending assignment notification to ${assignedUser.email}:`, notifError);
@@ -385,6 +429,7 @@ module.exports = (pool) => {
       }
       
       console.log(`Task created: ${task_code}, Type: ${taskType}, Scheduled: ${finalScheduledDate}`);
+      logAudit(pool, req, { action: AUDIT_ACTIONS.TASK_CREATED, entityType: AUDIT_ENTITY_TYPES.TASK, entityId: task.id, details: { task_code: task.task_code } }).catch(() => {});
       res.status(201).json(task);
     } catch (error) {
       console.error('Error creating task:', error);
@@ -413,8 +458,9 @@ module.exports = (pool) => {
   // Start task (only assigned users can start tasks)
   router.patch('/:id/start', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       // First check if task exists and if user is assigned
-      const taskCheck = await pool.query(
+      const taskCheck = await db.query(
         `SELECT t.*, 
                 EXISTS (
                   SELECT 1 FROM task_assignments ta 
@@ -478,10 +524,10 @@ module.exports = (pool) => {
 
           // Create overtime request for acknowledgement
           const overtimeResult = await client.query(
-            `INSERT INTO overtime_requests (task_id, requested_by, request_type, request_time, status)
-             VALUES ($1, $2, 'start_after_hours', $3, 'pending')
+            `INSERT INTO overtime_requests (task_id, requested_by, request_type, request_time, status, organization_id)
+             VALUES ($1, $2, 'start_after_hours', $3, 'pending', $4)
              RETURNING *`,
-            [req.params.id, req.session.userId, now]
+            [req.params.id, req.session.userId, now, task.organization_id]
           );
           overtimeRequest = overtimeResult.rows[0];
 
@@ -524,9 +570,9 @@ module.exports = (pool) => {
               const { v4: uuidv4 } = require('uuid');
               const slipNo = `SLIP-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
               const slipRes = await client.query(
-                `INSERT INTO inventory_slips (slip_no, task_id, created_by)
-                 VALUES ($1, $2, $3) RETURNING *`,
-                [slipNo, req.params.id, req.session.userId || null]
+                `INSERT INTO inventory_slips (slip_no, task_id, created_by, organization_id)
+                 VALUES ($1, $2, $3, $4) RETURNING *`,
+                [slipNo, req.params.id, req.session.userId || null, task.organization_id]
               );
               const slip = slipRes.rows[0];
 
@@ -556,9 +602,9 @@ module.exports = (pool) => {
                   [slip.id, item.id, item.item_code, item.item_description, qty]
                 );
                 await client.query(
-                  `INSERT INTO inventory_transactions (item_id, task_id, slip_id, tx_type, qty_change, created_by)
-                   VALUES ($1, $2, $3, 'use', $4, $5)`,
-                  [item.id, req.params.id, slip.id, -qty, req.session.userId || null]
+                  `INSERT INTO inventory_transactions (item_id, task_id, slip_id, tx_type, qty_change, created_by, organization_id)
+                   VALUES ($1, $2, $3, 'use', $4, $5, $6)`,
+                  [item.id, req.params.id, slip.id, -qty, req.session.userId || null, task.organization_id]
                 );
 
                 updates[code] = newQty;
@@ -607,9 +653,10 @@ module.exports = (pool) => {
   // Complete task
   router.patch('/:id/complete', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { overall_status, duration_minutes, cm_occurred_at, started_at, completed_at } = req.body;
       
-      const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+      const taskResult = await db.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
       if (taskResult.rows.length === 0) {
         return res.status(404).json({ error: 'Task not found' });
       }
@@ -677,7 +724,7 @@ module.exports = (pool) => {
          WHERE id = $${paramCount} 
          RETURNING *`;
 
-      const result = await pool.query(updateQuery, updateValues);
+      const result = await db.query(updateQuery, updateValues);
 
       // Check if completing outside working hours (07:00-16:00)
       const now = new Date();
@@ -687,25 +734,25 @@ module.exports = (pool) => {
       let overtimeRequest = null;
       if (outsideWorkingHours) {
         // Get user info
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT id, full_name, username, email FROM users WHERE id = $1',
           [req.session.userId]
         );
         const user = userResult.rows[0] || { id: req.session.userId, full_name: 'Unknown', username: 'unknown' };
 
         // Get asset name for notification
-        const assetResult = await pool.query(
+        const assetResult = await db.query(
           'SELECT asset_name FROM assets WHERE id = $1',
           [task.asset_id]
         );
         const assetName = assetResult.rows[0]?.asset_name || 'Unknown Asset';
 
         // Create overtime request for acknowledgement
-        const overtimeResult = await pool.query(
-          `INSERT INTO overtime_requests (task_id, requested_by, request_type, request_time, status)
-           VALUES ($1, $2, 'complete_after_hours', $3, 'pending')
+        const overtimeResult = await db.query(
+          `INSERT INTO overtime_requests (task_id, requested_by, request_type, request_time, status, organization_id)
+           VALUES ($1, $2, 'complete_after_hours', $3, 'pending', $4)
            RETURNING *`,
-          [req.params.id, req.session.userId, now]
+          [req.params.id, req.session.userId, now, task.organization_id]
         );
         overtimeRequest = overtimeResult.rows[0];
 
@@ -749,6 +796,7 @@ module.exports = (pool) => {
   // Generate report from template (Word or Excel)
   router.get('/:id/report', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const taskId = req.params.id;
       const requestedFormat = req.query.format ? req.query.format.toLowerCase() : null; // Optional
       
@@ -763,7 +811,7 @@ module.exports = (pool) => {
       console.log(`Report request for task ID: ${taskId}, format: ${requestedFormat || 'auto'}`);
 
       // Get task details with location
-      const taskResult = await pool.query(`
+      const taskResult = await db.query(`
         SELECT t.*, 
                a.asset_code, a.asset_name, a.asset_type, a.location,
                u.full_name as assigned_to_name,
@@ -798,7 +846,7 @@ module.exports = (pool) => {
       }
 
       // Get checklist response with metadata
-      const responseResult = await pool.query(
+      const responseResult = await db.query(
         `SELECT cr.*, u.full_name as submitted_by_name 
          FROM checklist_responses cr 
          LEFT JOIN users u ON cr.submitted_by = u.id 
@@ -808,7 +856,7 @@ module.exports = (pool) => {
       );
 
       // Get failed item images for this task
-      const imagesResult = await pool.query(
+      const imagesResult = await db.query(
         'SELECT * FROM failed_item_images WHERE task_id = $1 ORDER BY uploaded_at ASC',
         [taskId]
       );
@@ -928,14 +976,71 @@ module.exports = (pool) => {
     }
   });
 
+  // Delete single task (system_owner only)
+  router.delete('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const db = getDb(req, pool);
+
+      // Verify task exists
+      const taskResult = await db.query('SELECT id, task_code FROM tasks WHERE id = $1', [id]);
+      if (taskResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+
+      const taskRow = taskResult.rows[0];
+      await db.query('DELETE FROM tasks WHERE id = $1', [id]);
+      logAudit(pool, req, { action: AUDIT_ACTIONS.TASK_DELETED, entityType: AUDIT_ENTITY_TYPES.TASK, entityId: id, details: { task_code: taskRow.task_code } }).catch(() => {});
+      res.json({ message: `Task ${taskRow.task_code} deleted successfully` });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      res.status(500).json({ error: 'Failed to delete task' });
+    }
+  });
+
+  // Bulk delete tasks (system_owner only)
+  router.post('/bulk-delete', requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'ids array is required' });
+      }
+
+      const db = getDb(req, pool);
+
+      // Verify tasks exist and get their codes for confirmation
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+      const taskResult = await db.query(
+        `SELECT id, task_code FROM tasks WHERE id IN (${placeholders})`,
+        ids
+      );
+
+      if (taskResult.rows.length === 0) {
+        return res.status(404).json({ error: 'No matching tasks found' });
+      }
+
+      await db.query(`DELETE FROM tasks WHERE id IN (${placeholders})`, ids);
+      const deletedCodes = taskResult.rows.map(t => t.task_code);
+      logAudit(pool, req, { action: AUDIT_ACTIONS.TASK_BULK_DELETED, entityType: AUDIT_ENTITY_TYPES.TASK, details: { count: deletedCodes.length, task_codes: deletedCodes.slice(0, 5) } }).catch(() => {});
+      res.json({
+        message: `${taskResult.rows.length} task(s) deleted successfully`,
+        deleted: deletedCodes
+      });
+    } catch (error) {
+      console.error('Error bulk deleting tasks:', error);
+      res.status(500).json({ error: 'Failed to delete tasks' });
+    }
+  });
+
   return router;
 };
 
 // Helper function to generate CM task from failed PM
 async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
+  const db = pool; // This function runs outside request context, use pool directly
   try {
     // Get checklist template to find CM generation rules
-    const templateResult = await pool.query(
+    const templateResult = await db.query(
       'SELECT cm_generation_rules FROM checklist_templates WHERE id = $1',
       [checklistTemplateId]
     );
@@ -955,14 +1060,14 @@ async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
     if (!cmRules || !cmRules.auto_generate) return;
 
     // Get the PM task details
-    const pmTaskResult = await pool.query(
+    const pmTaskResult = await db.query(
       'SELECT * FROM tasks WHERE id = $1',
       [pmTaskId]
     );
     const pmTask = pmTaskResult.rows[0];
 
     // Get who performed the PM task (from checklist response)
-    const pmPerformedByResult = await pool.query(
+    const pmPerformedByResult = await db.query(
       `SELECT submitted_by FROM checklist_responses 
        WHERE task_id = $1 
        ORDER BY submitted_at DESC 
@@ -974,7 +1079,7 @@ async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
       : null;
 
     // Find CM template for the same asset type
-    const cmTemplateResult = await pool.query(
+    const cmTemplateResult = await db.query(
       `SELECT * FROM checklist_templates 
        WHERE asset_type = (SELECT asset_type FROM assets WHERE id = $1) 
        AND task_type IN ('PCM', 'UCM') 
@@ -982,14 +1087,23 @@ async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
       [assetId]
     );
 
-    const cmTemplateId = cmTemplateResult.rows.length > 0 
-      ? cmTemplateResult.rows[0].id 
-      : checklistTemplateId; // Fallback to PM template if no CM template exists
+    const cmTemplate = cmTemplateResult.rows.length > 0 ? cmTemplateResult.rows[0] : null;
+    const cmTemplateId = cmTemplate ? cmTemplate.id : checklistTemplateId; // Fallback to PM template if no CM template exists
 
-    const taskCode = `CM-${Date.now()}-${uuidv4().substring(0, 8).toUpperCase()}`;
+    let cmPrefix = 'PCM';
+    if (cmTemplate) {
+      const tc = (cmTemplate.template_code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const tn = (cmTemplate.template_name || '').trim();
+      if (tc && tc.length <= 8) cmPrefix = `PCM-${tc}`;
+      else if (tn) {
+        const abbrev = tn.split(/\s+/).map(w => (w[0] || '').toUpperCase()).join('').replace(/[^A-Z0-9]/g, '').slice(0, 6);
+        cmPrefix = `PCM-${abbrev || 'CM'}`;
+      } else if (tc) cmPrefix = `PCM-${tc.slice(0, 6)}`;
+    }
+    const taskCode = `${cmPrefix}-${uuidv4().substring(0, 4).toUpperCase()}`;
 
     // Get spares_used from PM task's checklist response (if any)
-    const pmSparesResult = await pool.query(
+    const pmSparesResult = await db.query(
       `SELECT spares_used FROM checklist_responses 
        WHERE task_id = $1 
        ORDER BY submitted_at DESC 
@@ -1007,7 +1121,7 @@ async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
 
     // Create CM task with spares_used from PM (stored as JSONB in task metadata)
     // Inherit organization_id from parent PM task
-    const cmTaskResult = await pool.query(
+    const cmTaskResult = await db.query(
       `INSERT INTO tasks (
         task_code, checklist_template_id, asset_id, task_type, 
         status, parent_task_id, scheduled_date, pm_performed_by, spares_used, organization_id
@@ -1020,7 +1134,7 @@ async function generateCMTask(pool, pmTaskId, checklistTemplateId, assetId) {
     // Generate CM letter
     // Inherit organization_id from task
     const letterNumber = `CM-LTR-${Date.now()}`;
-    await pool.query(
+    await db.query(
       `INSERT INTO cm_letters (
         task_id, parent_pm_task_id, letter_number, asset_id,
         issue_description, priority, status, organization_id

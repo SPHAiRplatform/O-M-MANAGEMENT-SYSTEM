@@ -129,6 +129,13 @@
   cursor: not-allowed;
 }
 
+.feedback-field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
 .feedback-modal-actions {
   display: flex;
   justify-content: flex-end;

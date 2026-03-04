@@ -38,6 +38,7 @@ function PlatformAnalytics() {
   const [error, setError] = useState('');
   const [analytics, setAnalytics] = useState(null);
   const [timeRange, setTimeRange] = useState('30d');
+  const [performerSort, setPerformerSort] = useState({ key: 'overallScore', dir: 'desc' });
 
   useEffect(() => {
     if (!isSuperAdmin()) {
@@ -358,6 +359,139 @@ function PlatformAnalytics() {
     };
   };
 
+  // --- Individual Performance helpers ---
+
+  const getSortedPerformers = () => {
+    if (!analytics?.performers) return [];
+    return [...analytics.performers].sort((a, b) => {
+      const aVal = a[performerSort.key] ?? 0;
+      const bVal = b[performerSort.key] ?? 0;
+      return performerSort.dir === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+  };
+
+  const handlePerformerSort = (key) => {
+    setPerformerSort(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const getSortIcon = (key) => {
+    if (performerSort.key !== key) return ' \u2195';
+    return performerSort.dir === 'desc' ? ' \u2193' : ' \u2191';
+  };
+
+  const getScoreClass = (score) => {
+    if (score >= 80) return 'high';
+    if (score >= 50) return 'medium';
+    return 'low';
+  };
+
+  const getRoleBadgeClass = (role) => {
+    if (role === 'admin' || role === 'super_admin') return 'badge-admin';
+    if (role === 'supervisor') return 'badge-supervisor';
+    return 'badge-technician';
+  };
+
+  const getPerformerSummary = () => {
+    const performers = analytics?.performers || [];
+    if (performers.length === 0) return { avgCompletion: 0, avgOnTime: 0, avgQuality: 0, workloadBalance: 'N/A' };
+
+    const avgCompletion = Math.round(performers.reduce((s, p) => s + p.completionRate, 0) / performers.length);
+    const avgOnTime = Math.round(performers.reduce((s, p) => s + p.onTimeRate, 0) / performers.length);
+    const avgQuality = Math.round(performers.reduce((s, p) => s + p.qualityScore, 0) / performers.length);
+
+    // Workload balance: standard deviation of totalAssigned
+    const avgWorkload = performers.reduce((s, p) => s + p.totalAssigned, 0) / performers.length;
+    const variance = performers.reduce((s, p) => s + Math.pow(p.totalAssigned - avgWorkload, 2), 0) / performers.length;
+    const stdDev = Math.sqrt(variance);
+    const cv = avgWorkload > 0 ? (stdDev / avgWorkload) * 100 : 0;
+    let workloadBalance;
+    if (cv <= 25) workloadBalance = 'Well Balanced';
+    else if (cv <= 50) workloadBalance = 'Moderate';
+    else workloadBalance = 'Imbalanced';
+
+    return { avgCompletion, avgOnTime, avgQuality, workloadBalance };
+  };
+
+  // Top Performers Chart
+  const getTopPerformersChartData = () => {
+    const performers = analytics?.performers || [];
+    if (performers.length === 0) return null;
+
+    const top = [...performers].sort((a, b) => b.overallScore - a.overallScore).slice(0, 10);
+
+    return {
+      labels: top.map(p => p.name.length > 18 ? p.name.substring(0, 18) + '...' : p.name),
+      datasets: [{
+        label: 'Overall Score',
+        data: top.map(p => p.overallScore),
+        backgroundColor: top.map(p => {
+          if (p.overallScore >= 80) return '#4CAF50';
+          if (p.overallScore >= 50) return '#FF9800';
+          return '#F44335';
+        }),
+        borderColor: '#fff',
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    };
+  };
+
+  // Workload Distribution Chart
+  const getWorkloadChartData = () => {
+    const performers = analytics?.performers || [];
+    if (performers.length === 0) return null;
+
+    const sorted = [...performers].sort((a, b) => b.totalAssigned - a.totalAssigned).slice(0, 15);
+
+    return {
+      labels: sorted.map(p => p.name.length > 15 ? p.name.substring(0, 15) + '...' : p.name),
+      datasets: [
+        {
+          label: 'Completed',
+          data: sorted.map(p => p.completed),
+          backgroundColor: '#4CAF50',
+          borderRadius: 4
+        },
+        {
+          label: 'Pending',
+          data: sorted.map(p => p.pending),
+          backgroundColor: '#FF9800',
+          borderRadius: 4
+        }
+      ]
+    };
+  };
+
+  const workloadChartOptions = {
+    ...chartOptions,
+    plugins: {
+      ...chartOptions.plugins,
+      title: { display: false }
+    },
+    scales: {
+      ...chartOptions.scales,
+      x: { ...chartOptions.scales.x, stacked: true },
+      y: { ...chartOptions.scales.y, stacked: true }
+    }
+  };
+
+  const topPerformerOptions = {
+    ...chartOptions,
+    indexAxis: 'y',
+    plugins: {
+      ...chartOptions.plugins,
+      title: { display: false },
+      legend: { display: false }
+    },
+    scales: {
+      ...chartOptions.scales,
+      x: { ...chartOptions.scales.x, max: 100, title: { display: true, text: 'Score %' } }
+    }
+  };
+
   if (loading) {
     return (
       <div className="platform-analytics-container">
@@ -614,6 +748,202 @@ function PlatformAnalytics() {
                       >
                         View
                       </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* INDIVIDUAL PERFORMANCE SECTION                                 */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+
+      <div className="performance-divider">
+        <h2 className="performance-divider-title">
+          <i className="fas fa-user-chart"></i> Individual Performance KPIs
+        </h2>
+        <p className="performance-divider-subtitle">
+          Assess employee performance, identify top performers, and monitor workload balance across teams
+        </p>
+      </div>
+
+      {/* Performance Summary KPIs */}
+      {analytics?.performers && analytics.performers.length > 0 && (() => {
+        const summary = getPerformerSummary();
+        return (
+          <div className="performer-kpi-grid">
+            <div className="performer-kpi-card">
+              <div className="performer-kpi-icon" style={{ background: '#e8f5e9', color: '#2e7d32' }}>
+                <i className="fas fa-check-circle"></i>
+              </div>
+              <div className="performer-kpi-content">
+                <div className="performer-kpi-label">Avg Completion Rate</div>
+                <div className="performer-kpi-value">{summary.avgCompletion}%</div>
+                <div className="performer-kpi-sub">Across all personnel</div>
+              </div>
+            </div>
+            <div className="performer-kpi-card">
+              <div className="performer-kpi-icon" style={{ background: '#e3f2fd', color: '#1565c0' }}>
+                <i className="fas fa-clock"></i>
+              </div>
+              <div className="performer-kpi-content">
+                <div className="performer-kpi-label">Avg On-Time Rate</div>
+                <div className="performer-kpi-value">{summary.avgOnTime}%</div>
+                <div className="performer-kpi-sub">Tasks completed by schedule</div>
+              </div>
+            </div>
+            <div className="performer-kpi-card">
+              <div className="performer-kpi-icon" style={{ background: '#fce4ec', color: '#c62828' }}>
+                <i className="fas fa-award"></i>
+              </div>
+              <div className="performer-kpi-content">
+                <div className="performer-kpi-label">Avg Quality Score</div>
+                <div className="performer-kpi-value">{summary.avgQuality}%</div>
+                <div className="performer-kpi-sub">Inspection pass rate</div>
+              </div>
+            </div>
+            <div className="performer-kpi-card">
+              <div className="performer-kpi-icon" style={{ background: '#fff3e0', color: '#e65100' }}>
+                <i className="fas fa-balance-scale"></i>
+              </div>
+              <div className="performer-kpi-content">
+                <div className="performer-kpi-label">Workload Balance</div>
+                <div className="performer-kpi-value">{summary.workloadBalance}</div>
+                <div className="performer-kpi-sub">Task distribution equity</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Performance Charts */}
+      <div className="analytics-charts-grid">
+        <div className="analytics-section chart-section">
+          <h2>Top Performers</h2>
+          <p className="section-description">Ranked by overall score (40% completion + 30% on-time + 30% quality)</p>
+          <div className="chart-wrapper">
+            {getTopPerformersChartData() ? (
+              <Bar data={getTopPerformersChartData()} options={topPerformerOptions} />
+            ) : (
+              <div className="no-data">No performer data available</div>
+            )}
+          </div>
+        </div>
+
+        <div className="analytics-section chart-section">
+          <h2>Workload Distribution</h2>
+          <p className="section-description">Tasks assigned per person — completed vs pending</p>
+          <div className="chart-wrapper">
+            {getWorkloadChartData() ? (
+              <Bar data={getWorkloadChartData()} options={workloadChartOptions} />
+            ) : (
+              <div className="no-data">No workload data available</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Performer Scorecard Table */}
+      <div className="analytics-section">
+        <div className="section-header">
+          <div>
+            <h2>Employee Performance Scorecard</h2>
+            <p className="section-description">
+              Detailed KPI breakdown per employee — click column headers to sort
+            </p>
+          </div>
+          <div className="performer-count">
+            {analytics?.performers?.length || 0} employees tracked
+          </div>
+        </div>
+        <div className="org-comparison-table-container">
+          {!analytics?.performers || analytics.performers.length === 0 ? (
+            <div className="no-data">No performer data available for the selected period</div>
+          ) : (
+            <table className="org-comparison-table performer-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Employee</th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('totalAssigned')}>
+                    Assigned{getSortIcon('totalAssigned')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('completed')}>
+                    Completed{getSortIcon('completed')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('completionRate')}>
+                    Completion %{getSortIcon('completionRate')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('onTimeRate')}>
+                    On-Time %{getSortIcon('onTimeRate')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('qualityScore')}>
+                    Quality %{getSortIcon('qualityScore')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('avgHours')}>
+                    Avg Hours{getSortIcon('avgHours')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('flagged')}>
+                    Flagged{getSortIcon('flagged')}
+                  </th>
+                  <th className="sortable-col" onClick={() => handlePerformerSort('overallScore')}>
+                    Score{getSortIcon('overallScore')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {getSortedPerformers().map((p, idx) => (
+                  <tr key={p.id}>
+                    <td className="performer-rank">{idx + 1}</td>
+                    <td>
+                      <div className="performer-name">{p.name}</div>
+                      <div className="performer-meta">
+                        <span className={`role-badge ${getRoleBadgeClass(p.role)}`}>
+                          {p.role?.replace('_', ' ')}
+                        </span>
+                        <span className="performer-org">{p.organization}</span>
+                      </div>
+                    </td>
+                    <td>{p.totalAssigned}</td>
+                    <td>{p.completed}</td>
+                    <td>
+                      <span className={`score-badge ${getScoreClass(p.completionRate)}`}>
+                        {p.completionRate}%
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`score-badge ${getScoreClass(p.onTimeRate)}`}>
+                        {p.onTimeRate}%
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`score-badge ${getScoreClass(p.qualityScore)}`}>
+                        {p.qualityScore}%
+                      </span>
+                    </td>
+                    <td>{p.avgHours !== null ? `${p.avgHours}h` : '-'}</td>
+                    <td>
+                      {p.flagged > 0 ? (
+                        <span className="flagged-count">{p.flagged}</span>
+                      ) : (
+                        <span className="no-flags">0</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="overall-score-cell">
+                        <span className={`score-badge overall ${getScoreClass(p.overallScore)}`}>
+                          {p.overallScore}
+                        </span>
+                        <div className="score-bar">
+                          <div
+                            className={`score-bar-fill ${getScoreClass(p.overallScore)}`}
+                            style={{ width: `${p.overallScore}%` }}
+                          ></div>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}

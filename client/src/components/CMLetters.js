@@ -3,6 +3,7 @@ import { getCMLetters, getCMLetter, updateCMLetterStatus, getApiBaseUrl, downloa
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext } from '../utils/organizationContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
+import './CMLetters.css';
 
 function CMLetters() {
   const [letters, setLetters] = useState([]);
@@ -266,8 +267,9 @@ function CMLetters() {
         <h2 className="page-title" style={{ margin: '0 0 20px 0' }}>Corrective Maintenance Letters</h2>
         
         {/* Filters Section */}
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div style={{ 
+        <div className="card cm-filters" style={{ marginBottom: '20px' }}>
+          <h3 className="cm-filters-title" style={{ marginTop: 0, marginBottom: '12px' }}>Filters</h3>
+          <div className="cm-filters-grid" style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
             gap: '15px',
@@ -309,7 +311,7 @@ function CMLetters() {
               />
             </div>
             
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="cm-filters-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 className="btn btn-sm btn-secondary"
                 onClick={() => setFilter({ status: '', startDate: '', endDate: '' })}
@@ -1126,9 +1128,9 @@ function CMLetters() {
                                     />
                                     <small style={{ color: '#666', fontSize: '12px' }}>
                                       {images.length > 0 && images[0]?.comment
-                                        ? `💡 Auto-filled from image description. You can edit it.` 
-                                        : letterDetails?.issue_description 
-                                          ? '💡 Will use issue description if not filled'
+                                        ? <><i className="bi bi-lightbulb"></i> Auto-filled from image description. You can edit it.</>
+                                        : letterDetails?.issue_description
+                                          ? <><i className="bi bi-lightbulb"></i> Will use issue description if not filled</>
                                           : 'Enter description or it will be taken from issue description'}
                                     </small>
                                   </div>
@@ -1220,7 +1222,7 @@ function CMLetters() {
                               </div>
                               {!letterDetails?.fault_description && (
                                 <div style={{ marginTop: '15px', padding: '12px', background: '#fff3cd', borderRadius: '4px', color: '#856404' }}>
-                                  ⚠️ Fault log information not yet filled. Click "Edit Fault Log" to add the required information.
+                                  <i className="bi bi-exclamation-triangle"></i> Fault log information not yet filled. Click "Edit Fault Log" to add the required information.
                                 </div>
                               )}
                             </div>

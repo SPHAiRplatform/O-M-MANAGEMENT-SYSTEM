@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for SPHAiRPlatform
+# Multi-stage Dockerfile for SPHAiRDigital
 # Stage 1: Build frontend
 FROM node:18-alpine AS frontend-builder
 

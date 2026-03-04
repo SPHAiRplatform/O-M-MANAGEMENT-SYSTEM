@@ -1,7 +1,7 @@
 # Multi-Tenant SaaS Implementation Summary
 
 ## Overview
-This document summarizes the multi-tenant SaaS architecture implementation for SPHAiRPlatform, enabling multiple companies to use the system with complete data isolation and per-tenant customization.
+This document summarizes the multi-tenant SaaS architecture implementation for SPHAiRDigital, enabling multiple companies to use the system with complete data isolation and per-tenant customization.
 
 ## Implementation Status: ✅ COMPLETE
 

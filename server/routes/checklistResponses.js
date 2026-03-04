@@ -5,6 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 const { validateUUID, validateJSONB, validateString, validateDateTime, handleValidationErrors, removeUnexpectedFields } = require('../middleware/inputValidation');
 const { isTechnician, requireAuth } = require('../middleware/auth');
 const { notifyTaskFlagged } = require('../utils/notifications');
+const { getDb } = require('../middleware/tenantContext');
+const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -12,9 +14,10 @@ module.exports = (pool) => {
   // Get all checklist responses
   router.get('/', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_id } = req.query;
       let query = `
-        SELECT cr.*, 
+        SELECT cr.*,
                t.task_code, t.overall_status,
                u.full_name as submitted_by_name
         FROM checklist_responses cr
@@ -31,7 +34,7 @@ module.exports = (pool) => {
 
       query += ' ORDER BY cr.submitted_at DESC';
 
-      const result = await pool.query(query, params);
+      const result = await db.query(query, params);
       res.json(result.rows);
     } catch (error) {
       console.error('Error fetching checklist responses:', error);
@@ -42,7 +45,8 @@ module.exports = (pool) => {
   // Get checklist response by ID
   router.get('/:id', requireAuth, async (req, res) => {
     try {
-      const result = await pool.query(`
+      const db = getDb(req, pool);
+      const result = await db.query(`
         SELECT cr.*, 
                t.task_code, t.overall_status,
                u.full_name as submitted_by_name
@@ -91,10 +95,11 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
-      const { 
-        task_id, 
-        checklist_template_id, 
-        response_data, 
+      const db = getDb(req, pool);
+      const {
+        task_id,
+        checklist_template_id,
+        response_data,
         submitted_by,
         maintenance_team,
         inspected_by,
@@ -108,12 +113,12 @@ module.exports = (pool) => {
       } = req.body;
 
       // Get task and template for validation
-      const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [task_id]);
+      const taskResult = await db.query('SELECT * FROM tasks WHERE id = $1', [task_id]);
       if (taskResult.rows.length === 0) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
-      const templateResult = await pool.query(
+      const templateResult = await db.query(
         'SELECT * FROM checklist_templates WHERE id = $1',
         [checklist_template_id]
       );
@@ -129,7 +134,7 @@ module.exports = (pool) => {
       const isAdminOrSuperAdmin = role === 'admin' || role === 'super_admin';
       
       if (!isAdminOrSuperAdmin) {
-        const assignmentCheck = await pool.query(
+        const assignmentCheck = await db.query(
           `SELECT 1 FROM task_assignments WHERE task_id = $1 AND user_id = $2`,
           [task_id, req.session.userId]
         );
@@ -180,20 +185,21 @@ module.exports = (pool) => {
       }
 
       // Save response with metadata and spares_used (for PM tasks, spares are stored but not deducted until CM starts)
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO checklist_responses (
           task_id, checklist_template_id, response_data, submitted_by,
-          maintenance_team, inspected_by, approved_by, spares_used
-        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb) RETURNING *`,
+          maintenance_team, inspected_by, approved_by, spares_used, organization_id
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9) RETURNING *`,
         [
-          task_id, 
-          checklist_template_id, 
-          JSON.stringify(response_data), 
+          task_id,
+          checklist_template_id,
+          JSON.stringify(response_data),
           submitted_by,
           maintenance_team || null,
           inspected_by || null,
           approved_by || null,
-          spares_used && Array.isArray(spares_used) ? JSON.stringify(spares_used) : null
+          spares_used && Array.isArray(spares_used) ? JSON.stringify(spares_used) : null,
+          task.organization_id
         ]
       );
 
@@ -202,8 +208,8 @@ module.exports = (pool) => {
       
       // Update task with metadata
       if (maintenance_team || inspected_by || approved_by) {
-        await pool.query(
-          `UPDATE tasks 
+        await db.query(
+          `UPDATE tasks
            SET maintenance_team = COALESCE($1, maintenance_team),
                inspected_by = COALESCE($2, inspected_by),
                approved_by = COALESCE($3, approved_by),
@@ -251,7 +257,7 @@ module.exports = (pool) => {
       taskUpdateQuery += ` WHERE id = $${paramCount} RETURNING *`;
       taskUpdateParams.push(task_id);
 
-      const taskUpdateResult = await pool.query(taskUpdateQuery, taskUpdateParams);
+      const taskUpdateResult = await db.query(taskUpdateQuery, taskUpdateParams);
       
       const updatedTask = taskUpdateResult.rows[0];
 
@@ -344,15 +350,18 @@ module.exports = (pool) => {
       
       // If PM task failed, generate CM task
       if (updatedTask.task_type === 'PM' && overallStatus === 'fail' && updatedTask.checklist_template_id) {
+        console.log(`[CM-GEN] PM task failed! task_type=${updatedTask.task_type} overallStatus=${overallStatus} template_id=${updatedTask.checklist_template_id}`);
         try {
           // Get checklist template to find CM generation rules
-          const cmRulesResult = await pool.query(
+          const cmRulesResult = await db.query(
             'SELECT cm_generation_rules FROM checklist_templates WHERE id = $1',
             [updatedTask.checklist_template_id]
           );
-          
+
+          console.log(`[CM-GEN] cmRulesResult rows: ${cmRulesResult.rows.length}, raw value:`, JSON.stringify(cmRulesResult.rows[0]?.cm_generation_rules));
+
           if (cmRulesResult.rows.length > 0) {
-            const cmRules = cmRulesResult.rows[0].cm_generation_rules;
+            let cmRules = cmRulesResult.rows[0].cm_generation_rules;
             if (cmRules && typeof cmRules === 'string') {
               try {
                 cmRules = JSON.parse(cmRules);
@@ -360,10 +369,15 @@ module.exports = (pool) => {
                 console.error('Error parsing cm_generation_rules:', e);
               }
             }
-            
-            if (cmRules && cmRules.auto_generate) {
+
+            console.log(`[CM-GEN] cmRules after parse:`, JSON.stringify(cmRules), `auto_generate=${cmRules?.auto_generate}`);
+
+            // Generate CM task when PM fails — default to auto-generate unless explicitly disabled
+            const shouldAutoGenerate = !cmRules || cmRules.auto_generate !== false;
+            console.log(`[CM-GEN] shouldAutoGenerate=${shouldAutoGenerate}`);
+            if (shouldAutoGenerate) {
               // Find CM template for the same asset type
-              const cmTemplateResult = await pool.query(
+              const cmTemplateResult = await db.query(
                 `SELECT * FROM checklist_templates 
                  WHERE asset_type = (SELECT asset_type FROM assets WHERE id = $1) 
                  AND task_type = 'CM' 
@@ -382,7 +396,7 @@ module.exports = (pool) => {
               
               // Create CM task (use PCM as task type, not CM)
               // Inherit organization_id from parent PM task
-              const cmTaskResult = await pool.query(
+              const cmTaskResult = await db.query(
                 `INSERT INTO tasks (
                   task_code, checklist_template_id, asset_id, task_type, 
                   status, parent_task_id, scheduled_date, pm_performed_by, organization_id
@@ -395,7 +409,7 @@ module.exports = (pool) => {
               // Generate CM letter
               // Inherit organization_id from task
               const letterNumber = `CM-LTR-${Date.now()}`;
-              const cmLetterResult = await pool.query(
+              const cmLetterResult = await db.query(
                 `INSERT INTO cm_letters (
                   task_id, parent_pm_task_id, letter_number, asset_id,
                   issue_description, priority, status, organization_id
@@ -406,7 +420,7 @@ module.exports = (pool) => {
                   letterNumber,
                   updatedTask.asset_id,
                   `Corrective maintenance required due to failed PM task: ${updatedTask.task_code}`,
-                  (cmRules.default_priority || 'medium'),
+                  (cmRules?.default_priority || 'medium'),
                   updatedTask.organization_id
                 ]
               );
@@ -416,7 +430,7 @@ module.exports = (pool) => {
               
               // Link images to CM letter AFTER it's created
               // Fetch all images from failed_item_images table for this task
-              const failedImagesResult = await pool.query(
+              const failedImagesResult = await db.query(
                 `SELECT image_path, image_filename, item_id, section_id, comment 
                  FROM failed_item_images 
                  WHERE task_id = $1 
@@ -458,7 +472,7 @@ module.exports = (pool) => {
               }
               
               if (allImages.length > 0) {
-                await pool.query(
+                await db.query(
                   'UPDATE cm_letters SET images = $1::jsonb, failure_comments = $2::jsonb WHERE id = $3',
                   [
                     JSON.stringify(allImages),
@@ -506,9 +520,10 @@ module.exports = (pool) => {
   // Save draft checklist response (auto-save)
   router.post('/draft', requireAuth, async (req, res) => {
     try {
-      const { 
-        task_id, 
-        checklist_template_id, 
+      const db = getDb(req, pool);
+      const {
+        task_id,
+        checklist_template_id,
         response_data,
         maintenance_team,
         inspected_by,
@@ -521,12 +536,14 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'task_id is required' });
       }
 
+      const organizationId = getOrganizationIdFromRequest(req);
+
       // Upsert draft response
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO draft_checklist_responses (
           task_id, checklist_template_id, response_data,
-          maintenance_team, inspected_by, approved_by, images, spares_used, saved_at
-        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7::jsonb, $8::jsonb, CURRENT_TIMESTAMP)
+          maintenance_team, inspected_by, approved_by, images, spares_used, saved_at, organization_id
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7::jsonb, $8::jsonb, CURRENT_TIMESTAMP, $9)
         ON CONFLICT (task_id) DO UPDATE SET
           checklist_template_id = EXCLUDED.checklist_template_id,
           response_data = EXCLUDED.response_data,
@@ -536,7 +553,8 @@ module.exports = (pool) => {
           images = EXCLUDED.images,
           spares_used = EXCLUDED.spares_used,
           saved_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = CURRENT_TIMESTAMP,
+          organization_id = EXCLUDED.organization_id
         RETURNING *`,
         [
           task_id,
@@ -546,7 +564,8 @@ module.exports = (pool) => {
           inspected_by || null,
           approved_by || null,
           JSON.stringify(images || null),
-          JSON.stringify(spares_used || null)
+          JSON.stringify(spares_used || null),
+          organizationId
         ]
       );
 
@@ -564,7 +583,8 @@ module.exports = (pool) => {
   // Get draft checklist response
   router.get('/draft/:taskId', requireAuth, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         'SELECT * FROM draft_checklist_responses WHERE task_id = $1',
         [req.params.taskId]
       );
@@ -595,7 +615,8 @@ module.exports = (pool) => {
   // Delete draft checklist response (after successful submission)
   router.delete('/draft/:taskId', requireAuth, async (req, res) => {
     try {
-      await pool.query(
+      const db = getDb(req, pool);
+      await db.query(
         'DELETE FROM draft_checklist_responses WHERE task_id = $1',
         [req.params.taskId]
       );

@@ -54,7 +54,7 @@ When a regular user (e.g., John Technician from Smart Innovations Energy) logs i
 #### A. Page Title Hook (`client/src/hooks/usePageTitle.js`)
 **New File:** Created dynamic page title hook
 - **Tenant routes** (`/tenant/*`): Shows "{ABBREVIATION} O&M System"
-- **Platform routes** (`/platform/*`): Shows "O&M System - SPHAiRPlatform"
+- **Platform routes** (`/platform/*`): Shows "O&M System - SPHAiRDigital"
 - Extracts abbreviation from:
   1. `company_name_display` from branding API (format: "SIE O&M System")
   2. `user.organization_name` from user object

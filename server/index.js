@@ -221,10 +221,22 @@ app.use(sanitizeRequestBody);
 // NOTE: Do NOT apply to /api/inventory/:id (inventory routes don't use UUID paths, except slips)
 // Apply to specific patterns that use UUIDs:
 app.use('/api/users/:id', validateUUIDParams);
-app.use('/api/tasks/:id', validateUUIDParams);
+app.use('/api/tasks/:id', (req, res, next) => {
+  // Skip validation for bulk-delete route
+  if (req.params.id === 'bulk-delete') {
+    return next();
+  }
+  validateUUIDParams(req, res, next);
+});
 app.use('/api/assets/:id', validateUUIDParams);
 app.use('/api/checklist-templates/:id', validateUUIDParams);
-app.use('/api/checklist-responses/:id', validateUUIDParams);
+app.use('/api/checklist-responses/:id', (req, res, next) => {
+  // Skip validation for draft routes
+  if (req.params.id === 'draft') {
+    return next();
+  }
+  validateUUIDParams(req, res, next);
+});
 // Apply UUID validation to CM letters routes, but exclude fault-log route
 app.use('/api/cm-letters/:id', (req, res, next) => {
   // Skip validation for fault-log routes
@@ -448,6 +460,8 @@ const overtimeRequestsRoutes = require('./routes/overtimeRequests');
 const plantRoutes = require('./routes/plant');
 const feedbackRoutes = require('./routes/feedback');
 const organizationsRoutes = require('./routes/organizations');
+const scadaRoutes = require('./routes/scada');
+const auditLogRoutes = require('./routes/auditLog');
 
 // Swagger (OpenAPI) docs
 const swaggerUi = require('swagger-ui-express');
@@ -455,7 +469,7 @@ const swaggerJSDoc = require('swagger-jsdoc');
 const openapiSpec = swaggerJSDoc({
   definition: {
     openapi: '3.0.0',
-    info: { title: 'SPHAiRPlatform API', version: '1.0.0' },
+    info: { title: 'SPHAiRDigital API', version: '1.0.0' },
     servers: [{ url: '/api' }, { url: '/api/v1' }],
     components: {
       securitySchemes: {
@@ -512,6 +526,8 @@ app.use('/api/overtime-requests', tenantContextMiddleware, overtimeRequestsRoute
 app.use('/api/plant', tenantContextMiddleware, plantRoutes(pool));
 app.use('/api/feedback', tenantContextMiddleware, feedbackRoutes(pool));
 app.use('/api/organizations', tenantContextMiddleware, organizationsRoutes(pool));
+app.use('/api/scada', tenantContextMiddleware, scadaRoutes(pool));
+app.use('/api/audit-log', tenantContextMiddleware, auditLogRoutes(pool));
 
 // Versioned API (v1) - mirrors /api for integration stability
 app.use('/api/v1/auth', authRoutes(pool));
@@ -553,7 +569,7 @@ const excelTemplatesDir = path.join(templatesDir, 'excel');
 app.get('/api/health', async (req, res) => {
   const health = {
     status: 'ok',
-    message: 'SPHAiRPlatform API is running',
+    message: 'SPHAiRDigital API is running',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',

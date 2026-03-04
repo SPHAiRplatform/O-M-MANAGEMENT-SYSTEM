@@ -1,8 +1,8 @@
-# SPHAiR Platform - Complete Deployment Guide (Single Company)
+# SPHAiR Digital - Complete Deployment Guide (Single Company)
 
-**Version:** 1.1  
-**Date:** February 2026  
-**Target:** Single company deployment on DigitalOcean  
+**Version:** 1.2
+**Date:** March 2026
+**Target:** Single company deployment on DigitalOcean (multi-tenant ready)
 **Estimated Setup Time:** 4-6 hours  
 **Estimated Monthly Cost:** $45-50/month (~$100-150 for 90 days)
 
@@ -49,7 +49,7 @@ Before starting, ensure you have:
 
 ## Overview
 
-This guide will deploy SPHAiR Platform for a single company using:
+This guide will deploy SPHAiR Digital for a single company using:
 
 1. **DigitalOcean** - Infrastructure (server, database, storage)
 2. **Cloudflare** - CDN, SSL, DDoS protection
@@ -62,7 +62,7 @@ This guide will deploy SPHAiR Platform for a single company using:
 
 ## Key Features
 
-**SPHAiR Platform includes:**
+**SPHAiR Digital includes:**
 - ✅ **Calendar System** - Automatically displays the current month on load
 - ✅ **Task Management** - Preventive and corrective maintenance tasks
 - ✅ **Multi-Tenant Support** - Organization-based data isolation
@@ -70,6 +70,15 @@ This guide will deploy SPHAiR Platform for a single company using:
 - ✅ **Report Generation** - Excel and PDF reports
 - ✅ **User Management** - Role-based access control
 - ✅ **File Uploads** - Secure file storage and management
+- ✅ **Offline Mode** - PWA with service worker, IndexedDB caching, and sync queue
+- ✅ **Plant Map / Sitemap Builder** - Visual sitemap with drag-and-drop builder
+- ✅ **CM Letters & Fault Log** - Corrective maintenance letter tracking
+- ✅ **Cycle Tracking** - Grass cutting and panel wash cycle management
+- ✅ **SCADA Integration** - Inverter monitoring dashboard (feature-gated)
+- ✅ **Audit Log** - Platform-level activity tracking
+- ✅ **Organization Branding** - Custom colors, logos, and terminology per org
+- ✅ **Feedback System** - In-app user feedback widget
+- ✅ **Platform Dashboard** - System owner analytics and management
 
 **Architecture:**
 ```
@@ -515,9 +524,16 @@ DB_PASSWORD=[your-database-password]
 DB_SSL=true
 DB_SSL_CA=/root/ca-certificate.crt
 
-# Session Configuration
+# Redis Configuration (used by docker-compose for session management)
+REDIS_ENABLED=true
+REDIS_URL=redis://redis:6379
+
+# Session & Auth Configuration
 SESSION_SECRET=[generate-random-string-here]
 JWT_SECRET=[generate-random-string-here]
+
+# Platform Service Token (for system owner / internal API calls)
+PLATFORM_SERVICE_TOKEN=[generate-random-string-here]
 
 # Application URLs
 FRONTEND_URL=https://yourdomain.com
@@ -531,12 +547,6 @@ SENDGRID_FROM_EMAIL=noreply@yourdomain.com
 UPLOAD_MAX_SIZE=10485760
 UPLOAD_DIR=/app/uploads
 
-# License Configuration (for single company)
-COMPANY_ID=[will-generate-later]
-COMPANY_NAME=Your Company Name
-LICENSE_TIER=small
-MAX_USERS=10
-
 # Security
 ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
@@ -547,6 +557,9 @@ ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 openssl rand -base64 32
 
 # Generate JWT_SECRET
+openssl rand -base64 32
+
+# Generate PLATFORM_SERVICE_TOKEN
 openssl rand -base64 32
 ```
 
@@ -613,7 +626,7 @@ curl http://localhost:3001/api/platform/health
 2. Click **Verify a Single Sender**
 3. Fill in the form:
    - **From Email:** noreply@yourdomain.com
-   - **From Name:** SPHAiR Platform
+   - **From Name:** SPHAiR Digital
    - **Reply To:** support@yourdomain.com
    - **Company Address:** Your company address
 4. Click **Create**
@@ -775,7 +788,7 @@ systemctl status certbot.timer
 2. Sign up for free account
 3. Click **Add New Monitor**
 4. **Monitor Type:** HTTP(s)
-5. **Friendly Name:** SPHAiR Platform
+5. **Friendly Name:** SPHAiR Digital
 6. **URL:** https://yourdomain.com
 7. **Monitoring Interval:** 5 minutes
 8. Click **Create Monitor**
@@ -1047,14 +1060,26 @@ docker stats
 - ✅ Review and optimize database
 - ✅ Review costs and usage
 
-### Application Updates
+### Application Updates (Live Deployment)
 
-**Method 1: Manual Update**
+Updates can be applied while the system is running. There will be a brief restart (~10-30 seconds) during the `up -d` step while the container swaps. Plan updates during off-hours if possible.
+
+**Method 1: Manual Update (Recommended)**
 ```bash
 cd /opt/sphair
+
+# Pull latest code
 git pull origin main
-docker-compose build
-docker-compose up -d
+
+# Build the new image (this does NOT affect the running app)
+docker-compose build app
+
+# Swap to the new container (brief ~10-30s restart)
+docker-compose up -d app
+
+# Verify the app is healthy
+docker-compose ps
+docker-compose logs --tail=20 app
 ```
 
 **Method 2: Automated Update (GitHub Actions)**

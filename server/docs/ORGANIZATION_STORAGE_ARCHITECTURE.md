@@ -2,7 +2,7 @@
 
 ## Overview
 
-SPHAiRPlatform implements **company-scoped file storage** using company names (slugs) to ensure complete data isolation between companies. Each company has its own folder structure with comprehensive subdirectories, preventing any possibility of data leakage or confusion.
+SPHAiRDigital implements **company-scoped file storage** using company names (slugs) to ensure complete data isolation between companies. Each company has its own folder structure with comprehensive subdirectories, preventing any possibility of data leakage or confusion.
 
 ## Folder Structure
 

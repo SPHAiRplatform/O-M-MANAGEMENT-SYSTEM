@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPHAiRPlatform Deployment Script
+# SPHAiRDigital Deployment Script
 # Usage: ./scripts/deploy.sh <environment> <version> [service-token]
 
 set -e
@@ -30,7 +30,7 @@ source "$DEPLOYMENT_CONFIG"
 SERVER_URL=${SERVER_URL:-http://localhost:3001}
 
 echo "=========================================="
-echo "SPHAiRPlatform Deployment"
+echo "SPHAiRDigital Deployment"
 echo "=========================================="
 echo "Environment: $ENVIRONMENT"
 echo "Version: $VERSION"

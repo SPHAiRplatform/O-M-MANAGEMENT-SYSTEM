@@ -1,4 +1,4 @@
-name: Deploy SPHAiRPlatform
+name: Deploy SPHAiRDigital
 
 on:
   push:
@@ -51,13 +51,13 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t sphairplatform:${{ github.sha }} .
+          docker build -t sphairdigital:${{ github.sha }} .
 
       - name: Push to registry
         if: github.event_name == 'push'
         run: |
           echo "Docker push would happen here"
-          # docker push sphairplatform:${{ github.sha }}
+          # docker push sphairdigital:${{ github.sha }}
 
   deploy-staging:
     needs: build

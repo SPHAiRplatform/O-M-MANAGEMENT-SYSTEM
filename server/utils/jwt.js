@@ -22,8 +22,8 @@ function generateToken(user) {
 
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
-    issuer: 'SPHAiRPlatform',
-    audience: 'SPHAiRPlatform-Client'
+    issuer: 'SPHAiRDigital',
+    audience: 'SPHAiRDigital-Client'
   });
 }
 
@@ -36,8 +36,8 @@ function generateToken(user) {
 function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET, {
-      issuer: 'SPHAiRPlatform',
-      audience: 'SPHAiRPlatform-Client'
+      issuer: 'SPHAiRDigital',
+      audience: 'SPHAiRDigital-Client'
     });
   } catch (error) {
     if (error.name === 'TokenExpiredError') {

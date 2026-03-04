@@ -1,6 +1,6 @@
 # Email Notification Setup Guide
 
-This guide explains how to configure email notifications for the SPHAiRPlatform.
+This guide explains how to configure email notifications for the SPHAiRDigital.
 
 ## Overview
 
@@ -26,11 +26,17 @@ SMTP_SERVICE=gmail
 
 # Email Sender Information
 EMAIL_FROM=your_email@gmail.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 
 # Application URL (for email links)
 APP_URL=http://localhost:3000
+
+# Contact Developer (feedback) - direct email for system owner
+# Messages submitted via "Contact Developer" from companies are sent here
+FEEDBACK_EMAIL=your_direct_email@example.com
 ```
+
+**FEEDBACK_EMAIL**: Set this to the system owner's direct email. All submissions from the "Contact Developer" form (from any company) are sent to this address. If unset, feedback is sent to `SMTP_USER`.
 
 ---
 
@@ -43,7 +49,7 @@ APP_URL=http://localhost:3000
 ### Step 2: Generate App Password
 1. Go to [Google App Passwords](https://myaccount.google.com/apppasswords)
 2. Select **"Mail"** and **"Other (Custom name)"**
-3. Enter **"SPHAiRPlatform"** as the name
+3. Enter **"SPHAiRDigital"** as the name
 4. Click **"Generate"**
 5. Copy the **16-character password** (use this as `SMTP_PASS`)
 
@@ -57,7 +63,7 @@ SMTP_USER=your_work_email@gmail.com
 SMTP_PASS=xxxx xxxx xxxx xxxx
 SMTP_SERVICE=gmail
 EMAIL_FROM=your_work_email@gmail.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 APP_URL=http://localhost:3000
 ```
 
@@ -83,7 +89,7 @@ SMTP_USER=your_work_email@company.com
 SMTP_PASS=your_office365_password
 SMTP_SERVICE=outlook
 EMAIL_FROM=your_work_email@company.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 APP_URL=http://localhost:3000
 ```
 
@@ -106,7 +112,7 @@ SMTP_USER=your_email@outlook.com
 SMTP_PASS=your_app_password_or_regular_password
 SMTP_SERVICE=outlook
 EMAIL_FROM=your_email@outlook.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 APP_URL=http://localhost:3000
 ```
 

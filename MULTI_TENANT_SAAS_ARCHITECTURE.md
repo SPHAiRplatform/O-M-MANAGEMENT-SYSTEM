@@ -463,7 +463,7 @@ export function getCompanyTheme(companyId) {
   return {
     primaryColor: settings.primary_color || '#0066CC',
     logo: settings.logo_url || '/default-logo.png',
-    companyName: settings.company_name_display || 'SPHAiR Platform',
+    companyName: settings.company_name_display || 'SPHAiR Digital',
     favicon: settings.favicon_url || '/favicon.ico'
   };
 }

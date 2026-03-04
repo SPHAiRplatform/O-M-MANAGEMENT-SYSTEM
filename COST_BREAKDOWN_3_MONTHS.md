@@ -1,4 +1,4 @@
-# SPHAiR Platform - 3-Month Cost Breakdown for Stakeholders
+# SPHAiR Digital - 3-Month Cost Breakdown for Stakeholders
 
 **Version:** 1.0  
 **Date:** January 2026  
@@ -14,7 +14,7 @@
 
 **Total Estimated Cost for 3 Months: $135 - $144 USD**
 
-This includes all essential infrastructure and services required to run SPHAiR Platform for a single company deployment.
+This includes all essential infrastructure and services required to run SPHAiR Digital for a single company deployment.
 
 **Breakdown:**
 - **Infrastructure (DigitalOcean):** $132

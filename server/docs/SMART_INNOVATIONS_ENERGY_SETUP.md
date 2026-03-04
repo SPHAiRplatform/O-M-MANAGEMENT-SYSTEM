@@ -2,7 +2,7 @@
 
 ## Overview
 
-Smart Innovations Energy is the default organization for the SPHAiRPlatform system. All existing templates, tasks, assets, and other data belong to this organization.
+Smart Innovations Energy is the default organization for the SPHAiRDigital system. All existing templates, tasks, assets, and other data belong to this organization.
 
 ## Organization Details
 

@@ -274,7 +274,7 @@ function setTenantContext(pool) {
 - Detect if on tenant route (`/tenant/*`)
 - If tenant route + system owner: Show "Back to Platform" button
 - If tenant route: Show company abbreviation (e.g., "SIE")
-- If platform route: Show "SPHAiRPlatform" or "Platform Admin"
+- If platform route: Show "SPHAiRDigital" or "Platform Admin"
 - Get company abbreviation from organization data or branding
 
 ### Changes to Make:

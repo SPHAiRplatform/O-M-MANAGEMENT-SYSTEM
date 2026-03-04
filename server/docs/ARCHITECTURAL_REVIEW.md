@@ -1,4 +1,4 @@
-# SPHAiR Platform - Architectural Review
+# SPHAiR Digital - Architectural Review
 ## Alignment with SaaS Principles
 
 **Review Date:** January 2026  

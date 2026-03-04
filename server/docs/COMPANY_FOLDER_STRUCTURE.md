@@ -2,7 +2,7 @@
 
 ## Overview
 
-SPHAiRPlatform uses **company name-based folders** (slugs) instead of organization IDs for better organization and management. Each company has a complete folder structure with all necessary subdirectories.
+SPHAiRDigital uses **company name-based folders** (slugs) instead of organization IDs for better organization and management. Each company has a complete folder structure with all necessary subdirectories.
 
 ## Folder Structure
 

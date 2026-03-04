@@ -1,4 +1,4 @@
-# SPHAiR Platform - Production Readiness Assessment
+# SPHAiR Digital - Production Readiness Assessment
 
 **Version:** 1.0  
 **Date:** January 2026  

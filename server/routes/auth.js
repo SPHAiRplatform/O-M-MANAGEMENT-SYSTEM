@@ -1,12 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const { validateLogin, validateChangePassword } = require('../middleware/inputValidation');
 const { generateToken } = require('../utils/jwt');
 const { storeToken, storeUserSession, getUserSession, deleteUserSession, deleteToken } = require('../utils/redis');
 const { recordFailedLoginAttempt, clearAccountLockout } = require('../middleware/rateLimiter');
 const { ValidationError, AuthenticationError } = require('../utils/errors');
+const { sendEmail } = require('../utils/email');
 const logger = require('../utils/logger');
+const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
 const deleteRedisToken = deleteToken; // Alias for clarity
 
 module.exports = (pool) => {
@@ -68,8 +71,8 @@ module.exports = (pool) => {
 
       if (userResult.rows.length === 0) {
         logger.warn('User not found for login attempt', { username });
-        // Record failed attempt for account-based tracking
         await recordFailedLoginAttempt(req);
+        logAudit(pool, req, { action: AUDIT_ACTIONS.LOGIN_FAILED, entityType: AUDIT_ENTITY_TYPES.AUTH, details: { username, reason: 'user_not_found' } }).catch(() => {});
         throw new AuthenticationError('Invalid username or password');
       }
 
@@ -79,6 +82,7 @@ module.exports = (pool) => {
       // Check if user is active
       if (!user.is_active) {
         logger.warn('Login attempt for deactivated account', { username, userId: user.id });
+        logAudit(pool, req, { action: AUDIT_ACTIONS.LOGIN_FAILED, entityType: AUDIT_ENTITY_TYPES.AUTH, details: { username, reason: 'account_deactivated', user_id: user.id } }).catch(() => {});
         
         // Get admin email for the error message
         let adminEmail = 'the administrator';
@@ -156,8 +160,8 @@ module.exports = (pool) => {
 
       if (!passwordMatch) {
         logger.warn('Password mismatch for login attempt', { username });
-        // Record failed attempt for account-based tracking
         await recordFailedLoginAttempt(req);
+        logAudit(pool, req, { action: AUDIT_ACTIONS.LOGIN_FAILED, entityType: AUDIT_ENTITY_TYPES.AUTH, details: { username, reason: 'invalid_password' } }).catch(() => {});
         if (!res.headersSent) {
           return res.status(401).json({ error: 'Invalid username or password' });
         }
@@ -168,9 +172,9 @@ module.exports = (pool) => {
       await clearAccountLockout(req);
 
       // Check if user is using default password
-      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'witkop123';
+      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
       const isDefaultPassword = await bcrypt.compare(DEFAULT_PASSWORD, user.password_hash);
-      
+
       // Check password_changed column if it exists
       let passwordChanged = true; // Default to true for backward compatibility
       try {
@@ -593,6 +597,118 @@ module.exports = (pool) => {
       if (!res.headersSent) {
         res.status(500).json({ error: 'Session check failed', details: error.message });
       }
+    }
+  });
+
+  // Forgot password — send a 6-digit code to the user's email
+  router.post('/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+      const trimmed = email.trim().toLowerCase();
+
+      const userResult = await pool.query(
+        `SELECT id, email, full_name, username, is_active FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1`,
+        [trimmed]
+      );
+
+      // Always respond with success to avoid leaking whether the account exists
+      if (userResult.rows.length === 0 || !userResult.rows[0].is_active) {
+        return res.json({ success: true, message: 'If an account with that email exists, a reset code has been sent.' });
+      }
+
+      const user = userResult.rows[0];
+
+      // Generate a 6-digit numeric code (easy to type)
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
+      const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+      await pool.query(
+        `UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3`,
+        [hashedCode, expires, user.id]
+      );
+
+      // Send the code via email
+      const emailResult = await sendEmail({
+        to: user.email,
+        subject: 'Your Password Reset Code — SPHAiRDigital',
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+            <h2 style="color:#333;margin-bottom:8px;">Password Reset</h2>
+            <p>Hello ${user.full_name || user.username},</p>
+            <p>You requested a password reset. Use the code below to set a new password:</p>
+            <div style="text-align:center;margin:24px 0;">
+              <span style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#007bff;background:#f0f4ff;padding:12px 24px;border-radius:8px;">${code}</span>
+            </div>
+            <p style="color:#666;font-size:13px;">This code expires in <strong>15 minutes</strong>. If you didn't request this, you can ignore this email.</p>
+            <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+            <p style="color:#999;font-size:12px;text-align:center;">SPHAiRDigital &mdash; Do not share this code with anyone.</p>
+          </div>
+        `
+      });
+
+      if (!emailResult.success) {
+        logger.warn('Failed to send password reset email', { userId: user.id, reason: emailResult.reason || emailResult.error });
+      }
+
+      res.json({ success: true, message: 'If an account with that email exists, a reset code has been sent.' });
+    } catch (error) {
+      logger.error('Forgot password error', { error: error.message });
+      res.status(500).json({ error: 'Something went wrong. Please try again.' });
+    }
+  });
+
+  // Reset password — verify the code and set a new password
+  router.post('/reset-password', async (req, res) => {
+    try {
+      const { email, code, newPassword } = req.body;
+      if (!email || !code || !newPassword) {
+        return res.status(400).json({ error: 'Email, code, and new password are required' });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+
+      const trimmedEmail = email.trim().toLowerCase();
+      const hashedCode = crypto.createHash('sha256').update(String(code).trim()).digest('hex');
+
+      const userResult = await pool.query(
+        `SELECT id, password_reset_token, password_reset_expires FROM users
+         WHERE (LOWER(email) = $1 OR LOWER(username) = $1) AND is_active = true`,
+        [trimmedEmail]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Invalid or expired reset code' });
+      }
+
+      const user = userResult.rows[0];
+
+      if (!user.password_reset_token || user.password_reset_token !== hashedCode) {
+        return res.status(400).json({ error: 'Invalid or expired reset code' });
+      }
+
+      if (!user.password_reset_expires || new Date(user.password_reset_expires) < new Date()) {
+        return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 10);
+
+      await pool.query(
+        `UPDATE users
+         SET password_hash = $1, password_changed = true, password_reset_token = NULL, password_reset_expires = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [newHash, user.id]
+      );
+
+      res.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
+    } catch (error) {
+      logger.error('Reset password error', { error: error.message });
+      res.status(500).json({ error: 'Something went wrong. Please try again.' });
     }
   });
 

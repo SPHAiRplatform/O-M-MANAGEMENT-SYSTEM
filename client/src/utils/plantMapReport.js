@@ -154,7 +154,7 @@ export async function generatePlantMapReport(mapElement, stats, viewMode, filena
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'italic');
     pdf.setTextColor(128, 128, 128);
-    pdf.text('This report was generated automatically by the SPHAiRPlatform', margin, footerY);
+    pdf.text('This report was generated automatically by the SPHAiRDigital', margin, footerY);
     
     // Generate filename if not provided
     if (!filename) {

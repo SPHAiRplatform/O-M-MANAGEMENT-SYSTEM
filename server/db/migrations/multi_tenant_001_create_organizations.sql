@@ -18,5 +18,5 @@ CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
 CREATE INDEX IF NOT EXISTS idx_organizations_is_active ON organizations(is_active);
 
 -- Add comments
-COMMENT ON TABLE organizations IS 'Organizations (tenants) using the SPHAiRPlatform system';
+COMMENT ON TABLE organizations IS 'Organizations (tenants) using the SPHAiRDigital system';
 COMMENT ON COLUMN organizations.slug IS 'URL-friendly unique identifier for the organization';

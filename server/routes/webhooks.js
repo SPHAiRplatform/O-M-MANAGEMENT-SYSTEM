@@ -2,6 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const { requireAdmin } = require('../middleware/auth');
 const { validateUUID, validateString, handleValidationErrors, removeUnexpectedFields } = require('../middleware/inputValidation');
+const { getDb } = require('../middleware/tenantContext');
 // Rate limiting removed for frequent use
 // const { sensitiveOperationLimiter } = require('../middleware/rateLimiter');
 
@@ -11,7 +12,8 @@ module.exports = (pool) => {
   // List webhooks (admin only)
   router.get('/', requireAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT id, name, url, events, is_active, created_by, created_at, updated_at
          FROM webhooks
          ORDER BY created_at DESC`
@@ -57,10 +59,11 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { name, url, events, secret } = req.body || {};
       const ev = Array.isArray(events) ? events : [];
 
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO webhooks (name, url, events, secret, created_by)
          VALUES ($1, $2, $3::jsonb, $4, $5)
          RETURNING *`,
@@ -99,9 +102,10 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { name, url, events, secret, is_active } = req.body || {};
 
-      const existing = await pool.query('SELECT * FROM webhooks WHERE id = $1', [req.params.id]);
+      const existing = await db.query('SELECT * FROM webhooks WHERE id = $1', [req.params.id]);
       if (existing.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
       const cur = existing.rows[0];
       const next = {
@@ -112,7 +116,7 @@ module.exports = (pool) => {
         is_active: (typeof is_active === 'boolean') ? is_active : cur.is_active
       };
 
-      const result = await pool.query(
+      const result = await db.query(
         `UPDATE webhooks
          SET name = $1,
              url = $2,
@@ -133,7 +137,8 @@ module.exports = (pool) => {
   // Delete webhook (admin only)
   router.delete('/:id', requireAdmin, async (req, res) => {
     try {
-      const result = await pool.query('DELETE FROM webhooks WHERE id = $1 RETURNING id', [req.params.id]);
+      const db = getDb(req, pool);
+      const result = await db.query('DELETE FROM webhooks WHERE id = $1 RETURNING id', [req.params.id]);
       if (result.rows.length === 0) return res.status(404).json({ error: 'Webhook not found' });
       res.json({ message: 'Deleted', id: result.rows[0].id });
     } catch (e) {
@@ -144,7 +149,8 @@ module.exports = (pool) => {
   // List deliveries (admin only)
   router.get('/:id/deliveries', requireAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT *
          FROM webhook_deliveries
          WHERE webhook_id = $1

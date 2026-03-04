@@ -3,6 +3,7 @@ const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 const { validateUUID, validateString, handleValidationErrors, removeUnexpectedFields } = require('../middleware/inputValidation');
 const { body } = require('express-validator');
 const { notifyEarlyCompletionStatus } = require('../utils/notifications');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -10,9 +11,10 @@ module.exports = (pool) => {
   // Get early completion requests for a task
   router.get('/task/:taskId', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { taskId } = req.params;
       
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT ecr.*, 
                 u1.full_name as requested_by_name,
                 u2.full_name as approved_by_name,
@@ -36,7 +38,8 @@ module.exports = (pool) => {
   // Get all pending early completion requests (superadmin only)
   router.get('/pending', requireSuperAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT ecr.*, 
                 t.task_code, t.task_type, t.scheduled_date,
                 a.asset_name,
@@ -70,11 +73,12 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_id, motivation } = req.body;
       const userId = req.session.userId;
 
       // Check if task exists and is assigned to user
-      const taskResult = await pool.query(
+      const taskResult = await db.query(
         `SELECT t.*, a.asset_name 
          FROM tasks t
          LEFT JOIN assets a ON t.asset_id = a.id
@@ -94,7 +98,7 @@ module.exports = (pool) => {
       }
 
       // Check if task already has a pending request
-      const existingRequest = await pool.query(
+      const existingRequest = await db.query(
         `SELECT id FROM early_completion_requests 
          WHERE task_id = $1 AND status = 'pending'`,
         [task_id]
@@ -125,11 +129,11 @@ module.exports = (pool) => {
       }
 
       // Create request
-      const result = await pool.query(
-        `INSERT INTO early_completion_requests (task_id, requested_by, motivation, status)
-         VALUES ($1, $2, $3, 'pending')
+      const result = await db.query(
+        `INSERT INTO early_completion_requests (task_id, requested_by, motivation, status, organization_id)
+         VALUES ($1, $2, $3, 'pending', $4)
          RETURNING *`,
-        [task_id, userId, motivation]
+        [task_id, userId, motivation, task.organization_id]
       );
 
       res.status(201).json(result.rows[0]);
@@ -142,11 +146,12 @@ module.exports = (pool) => {
   // Approve early completion request (superadmin only)
   router.post('/:id/approve', requireSuperAdmin, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { id } = req.params;
       const approvedBy = req.session.userId;
 
       // Get request
-      const requestResult = await pool.query(
+      const requestResult = await db.query(
         `SELECT ecr.*, t.*, a.asset_name
          FROM early_completion_requests ecr
          LEFT JOIN tasks t ON ecr.task_id = t.id
@@ -166,7 +171,7 @@ module.exports = (pool) => {
       }
 
       // Update request
-      await pool.query(
+      await db.query(
         `UPDATE early_completion_requests 
          SET status = 'approved',
              approved_by = $1,
@@ -177,7 +182,7 @@ module.exports = (pool) => {
       );
 
       // Update task to allow early opening
-      await pool.query(
+      await db.query(
         `UPDATE tasks 
          SET can_open_before_scheduled = true,
              updated_at = CURRENT_TIMESTAMP
@@ -187,7 +192,7 @@ module.exports = (pool) => {
 
       // Notify user
       try {
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT full_name, username FROM users WHERE id = $1',
           [request.requested_by]
         );
@@ -223,12 +228,13 @@ module.exports = (pool) => {
     handleValidationErrors
   ], async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { id } = req.params;
       const { rejection_reason } = req.body;
       const rejectedBy = req.session.userId;
 
       // Get request
-      const requestResult = await pool.query(
+      const requestResult = await db.query(
         `SELECT ecr.*, t.*, a.asset_name
          FROM early_completion_requests ecr
          LEFT JOIN tasks t ON ecr.task_id = t.id
@@ -248,7 +254,7 @@ module.exports = (pool) => {
       }
 
       // Update request
-      await pool.query(
+      await db.query(
         `UPDATE early_completion_requests 
          SET status = 'rejected',
              rejected_by = $1,
@@ -261,7 +267,7 @@ module.exports = (pool) => {
 
       // Notify user
       try {
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT full_name, username FROM users WHERE id = $1',
           [request.requested_by]
         );

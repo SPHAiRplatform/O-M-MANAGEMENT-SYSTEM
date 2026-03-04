@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { submitFeedback } from '../api/api';
+import { submitFeedback, getContactEmail } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/errorHandler';
 import './FeedbackModal.css';
 
 function FeedbackModal({ isOpen, onClose }) {
   const { user } = useAuth();
+  const [contactEmail, setContactEmail] = useState('');
   const [formData, setFormData] = useState({
-    email: '',
     subject: 'question',
     message: ''
   });
@@ -16,17 +16,15 @@ function FeedbackModal({ isOpen, onClose }) {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (isOpen && user) {
-      // Auto-populate email from user
-      setFormData(prev => ({
-        ...prev,
-        email: user.email || user.username || ''
-      }));
-      // Reset form state
+    if (isOpen) {
       setError('');
       setSuccess(false);
+      setFormData({ subject: 'question', message: '' });
+      getContactEmail()
+        .then((data) => setContactEmail(data.contact_email || ''))
+        .catch(() => setContactEmail(''));
     }
-  }, [isOpen, user]);
+  }, [isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,21 +33,18 @@ function FeedbackModal({ isOpen, onClose }) {
 
     try {
       await submitFeedback({
-        ...formData,
+        email: user?.email || user?.username || '',
+        subject: formData.subject,
+        message: formData.message,
         user_id: user?.id,
         page_url: window.location.pathname
       });
-      
+
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
         onClose();
-        // Reset form
-        setFormData({
-          email: user?.email || user?.username || '',
-          subject: 'question',
-          message: ''
-        });
+        setFormData({ subject: 'question', message: '' });
       }, 2000);
     } catch (err) {
       setError(getErrorMessage(err, 'Submit failed'));
@@ -60,10 +55,7 @@ function FeedbackModal({ isOpen, onClose }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   if (!isOpen) return null;
@@ -95,16 +87,12 @@ function FeedbackModal({ isOpen, onClose }) {
             )}
 
             <div className="feedback-form-group">
-              <label htmlFor="email">Email *</label>
+              <label>To</label>
               <input
                 type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                autoFocus
-                disabled={submitting}
+                value={contactEmail || '(not configured)'}
+                readOnly
+                disabled
               />
             </div>
 
@@ -152,7 +140,7 @@ function FeedbackModal({ isOpen, onClose }) {
               <button
                 type="submit"
                 className="feedback-btn feedback-btn-primary"
-                disabled={submitting}
+                disabled={submitting || !contactEmail}
               >
                 {submitting ? 'Sending...' : 'Send Message'}
               </button>

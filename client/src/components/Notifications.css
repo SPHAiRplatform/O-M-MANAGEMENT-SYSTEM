@@ -19,6 +19,7 @@
   background: #ffffff;
   border-bottom: 1px solid #edebe9;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 8px 8px 0 0;
 }
 
 .toolbar-left {
@@ -164,6 +165,7 @@
   flex: 1;
   overflow: hidden;
   background: #ffffff;
+  border-radius: 0 0 8px 8px;
 }
 
 /* Notifications List (Left Pane) */
@@ -716,14 +718,15 @@
   }
 
   .notifications-content-outlook {
-    flex-direction: column;
+    flex-direction: column-reverse;
   }
 
   .notification-preview-pane {
     width: 100%;
     border-left: none;
-    border-top: 1px solid #edebe9;
+    border-bottom: 1px solid #edebe9;
     max-height: 50vh;
+    flex-shrink: 0;
   }
 
   .notifications-toolbar {
@@ -739,9 +742,8 @@
     gap: 8px;
   }
 
-  .search-box {
-    width: 100%;
-    min-width: auto;
+  .toolbar-right .search-box {
+    display: none;
   }
 
   .filter-tabs {

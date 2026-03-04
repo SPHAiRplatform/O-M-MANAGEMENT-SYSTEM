@@ -1,7 +1,7 @@
 /**
  * Hook to dynamically set page title based on organization branding
  * Shows "{ABBREVIATION} O&M System" for tenant routes
- * Shows "O&M System - SPHAiRPlatform" for platform routes
+ * Shows "O&M System - SPHAiRDigital" for platform routes
  */
 
 import React, { useEffect, useState } from 'react';
@@ -43,9 +43,9 @@ export function usePageTitle(customTitle = null) {
       const isTenantRoute = location.pathname.startsWith('/tenant/');
       const isPlatformRoute = location.pathname.startsWith('/platform/');
 
-      // Platform routes: Show "O&M System - SPHAiRPlatform"
+      // Platform routes: Show "O&M System - SPHAiRDigital"
       if (isPlatformRoute) {
-        document.title = 'O&M System - SPHAiRPlatform';
+        document.title = 'O&M System - SPHAiRDigital';
         return;
       }
 
@@ -125,7 +125,7 @@ export function usePageTitle(customTitle = null) {
       }
 
       // Default title
-      document.title = 'O&M System - SPHAiRPlatform';
+      document.title = 'O&M System - SPHAiRDigital';
     };
 
     setTitle();

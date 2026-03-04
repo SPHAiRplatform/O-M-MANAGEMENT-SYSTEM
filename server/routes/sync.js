@@ -5,6 +5,7 @@
 
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -12,6 +13,7 @@ module.exports = (pool) => {
   // Bulk sync endpoint for offline operations
   router.post('/sync', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { operations } = req.body;
 
       if (!Array.isArray(operations) || operations.length === 0) {
@@ -33,7 +35,7 @@ module.exports = (pool) => {
               if (url.includes('/tasks/')) {
                 const taskId = url.match(/\/tasks\/([^\/]+)\/start/)?.[1];
                 if (taskId) {
-                  const taskResult = await pool.query(
+                  const taskResult = await db.query(
                     `UPDATE tasks SET status = 'in_progress', started_at = CURRENT_TIMESTAMP 
                      WHERE id = $1 AND status = 'pending' RETURNING *`,
                     [taskId]
@@ -47,7 +49,7 @@ module.exports = (pool) => {
               if (url.includes('/tasks/')) {
                 const taskId = url.match(/\/tasks\/([^\/]+)\/pause/)?.[1];
                 if (taskId && data) {
-                  const taskResult = await pool.query(
+                  const taskResult = await db.query(
                     `UPDATE tasks SET is_paused = TRUE, paused_at = CURRENT_TIMESTAMP, pause_reason = $1
                      WHERE id = $2 AND status = 'in_progress' RETURNING *`,
                     [data.pause_reason || null, taskId]
@@ -62,7 +64,7 @@ module.exports = (pool) => {
                 const taskId = url.match(/\/tasks\/([^\/]+)\/resume/)?.[1];
                 if (taskId) {
                   // Get current pause info
-                  const taskCheck = await pool.query('SELECT paused_at, total_pause_duration_minutes FROM tasks WHERE id = $1', [taskId]);
+                  const taskCheck = await db.query('SELECT paused_at, total_pause_duration_minutes FROM tasks WHERE id = $1', [taskId]);
                   const task = taskCheck.rows[0];
                   
                   if (task && task.paused_at) {
@@ -71,7 +73,7 @@ module.exports = (pool) => {
                     const pauseDuration = Math.round((now - pausedAt) / 60000);
                     const newTotalPause = (task.total_pause_duration_minutes || 0) + pauseDuration;
 
-                    const taskResult = await pool.query(
+                    const taskResult = await db.query(
                       `UPDATE tasks SET is_paused = FALSE, resumed_at = CURRENT_TIMESTAMP, 
                        total_pause_duration_minutes = $1, paused_at = NULL
                        WHERE id = $2 RETURNING *`,
@@ -87,7 +89,7 @@ module.exports = (pool) => {
               if (url.includes('/tasks/')) {
                 const taskId = url.match(/\/tasks\/([^\/]+)\/complete/)?.[1];
                 if (taskId && data) {
-                  const taskCheck = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+                  const taskCheck = await db.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
                   const task = taskCheck.rows[0];
                   
                   if (task) {
@@ -97,7 +99,7 @@ module.exports = (pool) => {
                     const rawDuration = data.duration_minutes || Math.round((completedAt - startedAt) / 60000);
                     const duration = Math.max(0, rawDuration - totalPauseDuration);
 
-                    const taskResult = await pool.query(
+                    const taskResult = await db.query(
                       `UPDATE tasks SET status = 'completed', completed_at = $1, 
                        overall_status = $2, duration_minutes = $3
                        WHERE id = $4 RETURNING *`,

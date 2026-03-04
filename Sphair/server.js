@@ -66,7 +66,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n🚀 SPHAiRPlatform Marketing Site Preview Server`);
+  console.log(`\n🚀 SPHAiRDigital Marketing Site Preview Server`);
   console.log(`📡 Server running at http://localhost:${PORT}`);
   console.log(`🌐 Open in browser: http://localhost:${PORT}\n`);
 }).on('error', (err) => {

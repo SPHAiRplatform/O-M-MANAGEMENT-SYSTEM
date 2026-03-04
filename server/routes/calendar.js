@@ -13,10 +13,25 @@ const {
   ensureCompanyDirs,
   getStoragePath
 } = require('../utils/organizationStorage');
+const { getOrganizationSetting, setOrganizationSetting } = require('../utils/organizationConfig');
 const fs = require('fs');
 const path = require('path');
 
 const YEAR_CALENDAR_TEMPLATE_FILENAME = 'year-calendar-template.xlsx';
+
+const CANONICAL_FREQUENCY_KEYS = [
+  'weekly', 'monthly', 'quarterly', 'bi-monthly', 'bi-annually', 'annually', 'public holiday'
+];
+
+const DEFAULT_CALENDAR_LEGEND = {
+  'weekly':         { color: '#ffff00', label: 'Weekly' },
+  'monthly':        { color: '#92d050', label: 'Monthly' },
+  'quarterly':      { color: '#00b0f0', label: 'Quarterly' },
+  'bi-monthly':     { color: '#F9B380', label: 'Bi-Monthly' },
+  'bi-annually':    { color: '#BFBFBF', label: 'Bi-Annual' },
+  'annually':       { color: '#CC5C0B', label: 'Annual' },
+  'public holiday': { color: '#808080', label: 'Holiday' }
+};
 
 const uploadStorage = multer.memoryStorage();
 const upload = multer({
@@ -168,10 +183,14 @@ module.exports = (pool) => {
       const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
       
+      // Get organization_id from tenant context
+      const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
+      const organizationId = getOrganizationIdFromRequest(req);
+
       const result = await db.query(
-        `INSERT INTO calendar_events 
-         (event_date, task_title, procedure_code, description, task_id, checklist_template_id, asset_id, frequency, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO calendar_events
+         (event_date, task_title, procedure_code, description, task_id, checklist_template_id, asset_id, frequency, created_by, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           event_date,
@@ -182,7 +201,8 @@ module.exports = (pool) => {
           checklist_template_id || null,
           asset_id || null,
           frequency || null,
-          req.session.userId
+          req.session.userId,
+          organizationId
         ]
       );
 
@@ -386,6 +406,91 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('Error serving year calendar template:', error);
       res.status(500).json({ error: 'Failed to get year calendar template', details: error.message });
+    }
+  });
+
+  // Get calendar legend config for the current organization (or defaults)
+  router.get('/legend', requireAuth, async (req, res) => {
+    try {
+      if (isSystemOwnerWithoutCompany(req)) {
+        return res.json({ legend: DEFAULT_CALENDAR_LEGEND });
+      }
+
+      const organizationId = getOrganizationIdFromRequest(req);
+      if (!organizationId) {
+        return res.json({ legend: DEFAULT_CALENDAR_LEGEND });
+      }
+
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+      const stored = await getOrganizationSetting(db, organizationId, 'calendar_legend', null);
+
+      if (!stored || typeof stored !== 'object') {
+        return res.json({ legend: DEFAULT_CALENDAR_LEGEND });
+      }
+
+      const merged = {};
+      for (const key of CANONICAL_FREQUENCY_KEYS) {
+        if (stored[key] && stored[key].color && stored[key].label) {
+          merged[key] = { color: stored[key].color, label: stored[key].label };
+        } else {
+          merged[key] = DEFAULT_CALENDAR_LEGEND[key];
+        }
+      }
+
+      res.json({ legend: merged });
+    } catch (error) {
+      console.error('Error fetching calendar legend:', error);
+      res.json({ legend: DEFAULT_CALENDAR_LEGEND });
+    }
+  });
+
+  // Update calendar legend config (system owner only, requires tenant context)
+  router.put('/legend', requireAuth, requireSystemOwner, async (req, res) => {
+    try {
+      if (isSystemOwnerWithoutCompany(req)) {
+        return res.status(403).json({ error: 'Please select a company to customize the legend' });
+      }
+
+      const organizationId = getOrganizationIdFromRequest(req);
+      if (!organizationId) {
+        return res.status(403).json({ error: 'Company context required' });
+      }
+
+      const { legend } = req.body;
+      if (!legend || typeof legend !== 'object') {
+        return res.status(400).json({ error: 'legend object is required' });
+      }
+
+      const hexRegex = /^#[0-9a-fA-F]{6}$/;
+      for (const key of CANONICAL_FREQUENCY_KEYS) {
+        if (!legend[key] || !legend[key].color || !legend[key].label) {
+          return res.status(400).json({ error: `Missing color or label for frequency: ${key}` });
+        }
+        if (!hexRegex.test(legend[key].color)) {
+          return res.status(400).json({ error: `Invalid hex color for frequency: ${key}` });
+        }
+        if (typeof legend[key].label !== 'string' || legend[key].label.trim().length === 0) {
+          return res.status(400).json({ error: `Label must be a non-empty string for frequency: ${key}` });
+        }
+        if (legend[key].label.length > 30) {
+          return res.status(400).json({ error: `Label too long for frequency: ${key} (max 30 chars)` });
+        }
+      }
+
+      const cleaned = {};
+      for (const key of CANONICAL_FREQUENCY_KEYS) {
+        cleaned[key] = { color: legend[key].color, label: legend[key].label.trim() };
+      }
+
+      const { getDb } = require('../middleware/tenantContext');
+      const db = getDb(req, pool);
+      await setOrganizationSetting(db, organizationId, 'calendar_legend', cleaned, 'Calendar frequency legend colors and labels');
+
+      res.json({ legend: cleaned });
+    } catch (error) {
+      console.error('Error updating calendar legend:', error);
+      res.status(500).json({ error: 'Failed to update calendar legend' });
     }
   });
 

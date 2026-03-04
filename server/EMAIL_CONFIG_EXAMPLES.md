@@ -18,10 +18,13 @@ SMTP_SERVICE=gmail
 
 # Email sender info
 EMAIL_FROM=your_work_email@gmail.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 
 # App URL
 APP_URL=http://localhost:3000
+
+# Optional: direct email for "Contact Developer" (system owner); defaults to SMTP_USER
+# FEEDBACK_EMAIL=your_direct_email@gmail.com
 ```
 
 **Important for Gmail:**
@@ -49,7 +52,7 @@ SMTP_SERVICE=outlook
 
 # Email sender info
 EMAIL_FROM=your_work_email@company.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 
 # App URL
 APP_URL=http://localhost:3000
@@ -71,7 +74,7 @@ SMTP_SERVICE=outlook
 
 # Email sender info
 EMAIL_FROM=your_email@outlook.com
-EMAIL_FROM_NAME=SPHAiRPlatform
+EMAIL_FROM_NAME=SPHAiRDigital
 
 # App URL
 APP_URL=http://localhost:3000
@@ -90,6 +93,7 @@ APP_URL=http://localhost:3000
 - [ ] Set `EMAIL_FROM` to match `SMTP_USER`
 - [ ] Set `APP_URL` to your application URL
 - [ ] Set `EMAIL_ENABLED=true`
+- [ ] (Optional) Set `FEEDBACK_EMAIL` to the system owner's direct email for "Contact Developer" submissions
 - [ ] Restart the server
 - [ ] Test by assigning a task to a user
 

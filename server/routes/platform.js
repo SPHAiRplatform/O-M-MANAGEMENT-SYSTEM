@@ -5,7 +5,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 const { getDb } = require('../middleware/tenantContext');
 
 // Middleware for platform service authentication
@@ -46,6 +46,49 @@ const requirePlatformAuth = (req, res, next) => {
 
 module.exports = (pool) => {
   const router = express.Router();
+
+  // Platform settings (system owner only) - e.g. Contact Developer email
+  // Uses pool directly — platform_settings has no RLS and no organization_id
+  router.get('/settings', requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT setting_value FROM platform_settings WHERE setting_key = 'feedback_contact_email'`
+      );
+      const row = result.rows[0];
+      res.json({
+        feedback_contact_email: row?.setting_value || ''
+      });
+    } catch (err) {
+      if (err.code === '42P01') {
+        return res.json({ feedback_contact_email: '' });
+      }
+      console.error('Error fetching platform settings:', err);
+      res.status(500).json({ error: 'Failed to load platform settings' });
+    }
+  });
+
+  router.put('/settings', requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { feedback_contact_email } = req.body || {};
+      const email = typeof feedback_contact_email === 'string' ? feedback_contact_email.trim() : '';
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+      }
+      await pool.query(
+        `INSERT INTO platform_settings (setting_key, setting_value, updated_at)
+         VALUES ('feedback_contact_email', $1, CURRENT_TIMESTAMP)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP`,
+        [email]
+      );
+      res.json({ success: true, feedback_contact_email: email });
+    } catch (err) {
+      if (err.code === '42P01') {
+        return res.status(503).json({ error: 'Platform settings table not found. Run migration create_platform_settings_table.sql.' });
+      }
+      console.error('Error updating platform settings:', err);
+      res.status(500).json({ error: 'Failed to save platform settings' });
+    }
+  });
 
   // Get current version
   router.get('/version', (req, res) => {
@@ -226,7 +269,7 @@ module.exports = (pool) => {
         db.query('SELECT COUNT(*) as count FROM organizations'),
         db.query('SELECT COUNT(*) as count FROM users WHERE organization_id IS NOT NULL'),
         db.query('SELECT COUNT(*) as count FROM assets'),
-        db.query('SELECT COUNT(*) as count FROM tasks')
+        db.query("SELECT COUNT(*) as count FROM tasks WHERE task_type = 'PM'")
       ]);
 
       const [
@@ -272,7 +315,7 @@ module.exports = (pool) => {
           id, name, slug, is_active, created_at, updated_at,
           (SELECT COUNT(*) FROM users WHERE organization_id = organizations.id) as user_count,
           (SELECT COUNT(*) FROM assets WHERE organization_id = organizations.id) as asset_count,
-          (SELECT COUNT(*) FROM tasks WHERE organization_id = organizations.id) as task_count
+          (SELECT COUNT(*) FROM tasks WHERE organization_id = organizations.id AND task_type = 'PM') as task_count
         FROM organizations
         ORDER BY created_at DESC
       `);
@@ -412,8 +455,8 @@ module.exports = (pool) => {
           u.id, u.username, u.email, u.full_name, u.role, u.roles, 
           u.is_active, u.created_at, u.last_login, u.organization_id,
           o.name as organization_name, o.slug as organization_slug,
-          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id) as task_count,
-          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND status = 'completed') as completed_task_count
+          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND task_type = 'PM') as task_count,
+          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND status = 'completed' AND task_type = 'PM') as completed_task_count
       `;
       
       if (hasRBAC) {
@@ -461,13 +504,15 @@ module.exports = (pool) => {
             JOIN roles r ON ur.role_id = r.id
             WHERE ur.user_id = u.id AND r.role_code = $${paramCount}
           )`);
+          params.push(roleFilter);
+          paramCount++;
         } else {
           conditions.push(`(u.role = $${paramCount} OR u.roles::text LIKE $${paramCount + 1})`);
           params.push(roleFilter);
           paramCount++;
+          params.push(`%${roleFilter}%`);
+          paramCount++;
         }
-        params.push(`%${roleFilter}%`);
-        paramCount++;
       }
 
       // Organization filter
@@ -701,14 +746,14 @@ module.exports = (pool) => {
       ] = await Promise.all([
         db.query('SELECT COUNT(*) as count FROM organizations'),
         db.query('SELECT COUNT(*) as count FROM users WHERE organization_id IS NOT NULL'),
-        db.query('SELECT COUNT(*) as count FROM tasks'),
+        db.query("SELECT COUNT(*) as count FROM tasks WHERE task_type = 'PM'"),
         db.query('SELECT COUNT(*) as count FROM assets'),
         db.query("SELECT COUNT(*) as count FROM organizations WHERE is_active = true"),
         db.query(`SELECT COUNT(*) as count FROM organizations WHERE created_at >= $1`, [startDate]),
         db.query(`SELECT COUNT(*) as count FROM users WHERE organization_id IS NOT NULL AND created_at >= $1`, [startDate]),
         db.query(`SELECT COUNT(DISTINCT u.id) as count FROM users u WHERE u.organization_id IS NOT NULL AND u.last_login >= $1`, [startDate]),
-        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND completed_at >= $1`, [startDate]),
-        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status IN ('pending', 'in_progress')`)
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND completed_at >= $1 AND task_type = 'PM'`, [startDate]),
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status IN ('pending', 'in_progress') AND task_type = 'PM'`)
       ]);
 
       // Get usage trends (daily data)
@@ -717,7 +762,7 @@ module.exports = (pool) => {
           DATE(created_at) as date,
           COUNT(*) as tasks_created
         FROM tasks
-        WHERE created_at >= $1
+        WHERE created_at >= $1 AND task_type = 'PM'
         GROUP BY DATE(created_at)
         ORDER BY date ASC
       `, [startDate]);
@@ -727,7 +772,7 @@ module.exports = (pool) => {
           DATE(completed_at) as date,
           COUNT(*) as tasks_completed
         FROM tasks
-        WHERE completed_at >= $1 AND completed_at IS NOT NULL
+        WHERE completed_at >= $1 AND completed_at IS NOT NULL AND task_type = 'PM'
         GROUP BY DATE(completed_at)
         ORDER BY date ASC
       `, [startDate]);
@@ -740,10 +785,10 @@ module.exports = (pool) => {
           o.name,
           o.slug,
           (SELECT COUNT(DISTINCT u.id) FROM users u WHERE u.organization_id = o.id) as user_count,
-          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id) as task_count,
-          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.status = 'completed') as completed_tasks
+          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type = 'PM') as task_count,
+          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.status = 'completed' AND t.task_type = 'PM') as completed_tasks
         FROM organizations o
-        ORDER BY (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id) DESC
+        ORDER BY (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type = 'PM') DESC
       `);
 
       // Get user growth trend
@@ -789,9 +834,77 @@ module.exports = (pool) => {
           });
         }
       });
-      const activity = Array.from(taskTrendsMap.values()).sort((a, b) => 
+      const activity = Array.from(taskTrendsMap.values()).sort((a, b) =>
         new Date(a.date) - new Date(b.date)
       );
+
+      // Get individual performer metrics
+      const performerResult = await db.query(`
+        SELECT
+          u.id,
+          u.full_name,
+          u.role,
+          o.name as organization_name,
+          COUNT(t.id) as total_assigned,
+          COUNT(t.id) FILTER (WHERE t.status = 'completed') as completed,
+          COUNT(t.id) FILTER (WHERE t.status IN ('pending', 'in_progress')) as pending,
+          COUNT(t.id) FILTER (
+            WHERE t.status = 'completed'
+            AND t.completed_at IS NOT NULL
+            AND t.scheduled_date IS NOT NULL
+            AND t.completed_at::date <= t.scheduled_date + interval '1 day'
+          ) as on_time,
+          COUNT(t.id) FILTER (
+            WHERE t.status = 'completed' AND t.overall_status = 'pass'
+          ) as quality_pass,
+          COUNT(t.id) FILTER (WHERE t.is_flagged = true) as flagged,
+          ROUND(AVG(
+            EXTRACT(EPOCH FROM (t.completed_at - t.started_at)) / 3600
+          ) FILTER (
+            WHERE t.status = 'completed'
+            AND t.started_at IS NOT NULL
+            AND t.completed_at IS NOT NULL
+          )::numeric, 1) as avg_hours
+        FROM users u
+        LEFT JOIN tasks t ON t.assigned_to = u.id AND t.created_at >= $1
+        LEFT JOIN organizations o ON u.organization_id = o.id
+        WHERE u.organization_id IS NOT NULL
+        GROUP BY u.id, u.full_name, u.role, o.name
+        HAVING COUNT(t.id) > 0
+        ORDER BY COUNT(t.id) FILTER (WHERE t.status = 'completed') DESC
+      `, [startDate]);
+
+      const performers = performerResult.rows.map(row => {
+        const totalAssigned = parseInt(row.total_assigned) || 0;
+        const completed = parseInt(row.completed) || 0;
+        const pending = parseInt(row.pending) || 0;
+        const onTime = parseInt(row.on_time) || 0;
+        const qualityPass = parseInt(row.quality_pass) || 0;
+        const flagged = parseInt(row.flagged) || 0;
+        const avgHours = row.avg_hours !== null ? parseFloat(row.avg_hours) : null;
+
+        const completionRate = totalAssigned > 0 ? Math.round((completed / totalAssigned) * 100) : 0;
+        const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) : 0;
+        const qualityScore = completed > 0 ? Math.round((qualityPass / completed) * 100) : 0;
+        // Overall score: 40% completion + 30% on-time + 30% quality
+        const overallScore = Math.round(completionRate * 0.4 + onTimeRate * 0.3 + qualityScore * 0.3);
+
+        return {
+          id: row.id,
+          name: row.full_name || row.role,
+          role: row.role,
+          organization: row.organization_name,
+          totalAssigned,
+          completed,
+          pending,
+          completionRate,
+          onTimeRate,
+          qualityScore,
+          avgHours,
+          flagged,
+          overallScore
+        };
+      });
 
       res.json({
         overview: {
@@ -836,11 +949,88 @@ module.exports = (pool) => {
             date: row.date.toISOString().split('T')[0],
             organizationsCreated: parseInt(row.organizations_created)
           }))
-        }
+        },
+        performers
       });
     } catch (error) {
       console.error('Error fetching platform analytics:', error);
       res.status(500).json({ error: 'Failed to fetch platform analytics' });
+    }
+  });
+
+  // Get recent platform activity (System Owner only)
+  router.get('/activity', requireAuth, async (req, res) => {
+    try {
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.role === 'system_owner';
+
+      if (!isSystemOwner) {
+        return res.status(403).json({ error: 'Only system owners can access platform activity' });
+      }
+
+      const db = getDb(req, pool);
+      const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+
+      // Get recent tasks created/completed across all orgs
+      const recentTasks = await db.query(`
+        SELECT
+          t.id, t.title, t.status, t.created_at, t.updated_at,
+          o.name as organization_name,
+          u.full_name as assigned_to_name,
+          'task' as activity_type
+        FROM tasks t
+        LEFT JOIN organizations o ON t.organization_id = o.id
+        LEFT JOIN users u ON t.assigned_to = u.id
+        ORDER BY t.updated_at DESC
+        LIMIT $1
+      `, [limit]);
+
+      // Get recent user logins (from users table last_login)
+      const recentUsers = await db.query(`
+        SELECT
+          u.id, u.full_name, u.username, u.last_login, u.created_at,
+          o.name as organization_name,
+          CASE
+            WHEN u.created_at > NOW() - INTERVAL '7 days' THEN 'user_created'
+            ELSE 'user_login'
+          END as activity_type
+        FROM users u
+        LEFT JOIN organizations o ON u.organization_id = o.id
+        WHERE u.organization_id IS NOT NULL
+        ORDER BY GREATEST(u.last_login, u.created_at) DESC NULLS LAST
+        LIMIT $1
+      `, [limit]);
+
+      // Merge and sort by timestamp
+      const activities = [
+        ...recentTasks.rows.map(t => ({
+          id: t.id,
+          type: t.activity_type,
+          title: t.status === 'completed' ? `Task completed: ${t.title}` : `Task updated: ${t.title}`,
+          organization: t.organization_name,
+          user: t.assigned_to_name,
+          timestamp: t.updated_at,
+          status: t.status
+        })),
+        ...recentUsers.rows.map(u => ({
+          id: u.id,
+          type: u.activity_type,
+          title: u.activity_type === 'user_created'
+            ? `New user: ${u.full_name || u.username}`
+            : `User login: ${u.full_name || u.username}`,
+          organization: u.organization_name,
+          user: u.full_name || u.username,
+          timestamp: u.activity_type === 'user_created' ? u.created_at : u.last_login
+        }))
+      ]
+        .filter(a => a.timestamp)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, limit);
+
+      res.json(activities);
+    } catch (error) {
+      console.error('Error fetching platform activity:', error);
+      res.status(500).json({ error: 'Failed to fetch platform activity' });
     }
   });
 

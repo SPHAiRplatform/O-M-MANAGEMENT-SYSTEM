@@ -227,6 +227,25 @@ async function createNotification(pool, notificationData) {
 }
 
 /**
+ * Resolve task display name: template_name if available, else task_code.
+ * Fetches from DB when task has checklist_template_id but no template_name.
+ */
+async function getTaskDisplayName(pool, task) {
+  if (task.template_name) return task.template_name;
+  if (!task.checklist_template_id) return task.task_code || 'Task';
+  try {
+    const res = await pool.query(
+      'SELECT template_name FROM checklist_templates WHERE id = $1',
+      [task.checklist_template_id]
+    );
+    const name = res.rows[0]?.template_name;
+    return (name && name.trim()) ? name : (task.task_code || 'Task');
+  } catch (e) {
+    return task.task_code || 'Task';
+  }
+}
+
+/**
  * Create task assignment notification
  * Sends email first (primary), then creates in-app notification (secondary)
  */
@@ -237,12 +256,26 @@ async function notifyTaskAssigned(pool, task, assignedUser) {
     scheduled_date: task.scheduled_date,
     asset_name: task.asset_name || 'Unknown Asset'
   };
-  
+
+  const taskDisplayName = await getTaskDisplayName(pool, task);
+  const creatorLabel = (task.creator_display_name && task.creator_display_name.trim()) ? task.creator_display_name.trim() : 'Unknown';
+  const scheduledStr = task.scheduled_date
+    ? new Date(task.scheduled_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+    : 'TBD';
+  const messageLines = [
+    `You have been assigned a new ${task.task_type} task: ${taskDisplayName} for ${taskDetails.asset_name}. Scheduled for ${scheduledStr}.`,
+    '',
+    `Assigned by ${creatorLabel}`
+  ];
+  const message = messageLines.join('\n');
+
   // PRIMARY: Send email notification first
   try {
     const emailResult = await sendTaskAssignmentEmail(assignedUser, {
       ...task,
-      asset_name: taskDetails.asset_name
+      asset_name: taskDetails.asset_name,
+      task_display_name: taskDisplayName,
+      creator_display_name: creatorLabel
     });
     
     if (emailResult.success) {
@@ -261,7 +294,7 @@ async function notifyTaskAssigned(pool, task, assignedUser) {
     task_id: task.id,
     type: 'task_assigned',
     title: 'New Task Assigned',
-    message: `You have been assigned a new ${task.task_type} task: ${task.task_code} for ${taskDetails.asset_name}. Scheduled for ${task.scheduled_date ? new Date(task.scheduled_date).toLocaleDateString() : 'TBD'}.`,
+    message,
     metadata: {
       task: taskDetails,
       highlight: true, // Highlight this task
@@ -281,12 +314,15 @@ async function notifyTaskReminder(pool, task, assignedUser) {
     scheduled_date: task.scheduled_date,
     asset_name: task.asset_name || 'Unknown Asset'
   };
+
+  const taskDisplayName = await getTaskDisplayName(pool, task);
   
   // PRIMARY: Send email notification first
   try {
     const emailResult = await sendTaskReminderEmail(assignedUser, {
       ...task,
-      asset_name: taskDetails.asset_name
+      asset_name: taskDetails.asset_name,
+      task_display_name: taskDisplayName
     });
     
     if (emailResult.success) {
@@ -305,7 +341,7 @@ async function notifyTaskReminder(pool, task, assignedUser) {
     task_id: task.id,
     type: 'task_reminder',
     title: 'Task Reminder - Due Soon',
-    message: `Reminder: Your ${task.task_type} task ${task.task_code} for ${taskDetails.asset_name} is scheduled in 3 days (${new Date(task.scheduled_date).toLocaleDateString()}).`,
+    message: `Reminder: Your ${task.task_type} task "${taskDisplayName}" for ${taskDetails.asset_name} is scheduled in 3 days (${new Date(task.scheduled_date).toLocaleDateString()}).`,
     metadata: {
       task: taskDetails,
       highlight: true,
@@ -316,19 +352,30 @@ async function notifyTaskReminder(pool, task, assignedUser) {
 }
 
 /**
- * Notify superadmin when task is flagged
+ * Notify org-scoped admins when task is flagged (budget exceeded).
+ * System owner (platform) must not receive company notifications; only admins
+ * in the same organization as the task are notified.
  */
 async function notifyTaskFlagged(pool, task, assignedUser) {
-  // Find all super admins
-  const superAdmins = await pool.query(
+  const organizationId = task.organization_id ?? null;
+  if (!organizationId) {
+    return [];
+  }
+
+  // Only notify admins that belong to the task's organization (excludes platform system owners with NULL org)
+  const orgAdmins = await pool.query(
     `SELECT id FROM users 
-     WHERE role = 'super_admin' 
-        OR (roles IS NOT NULL AND roles::text LIKE '%super_admin%')
-     AND is_active = true`
+     WHERE organization_id = $1
+       AND is_active = true
+       AND (
+         role IN ('admin', 'super_admin')
+         OR (roles IS NOT NULL AND roles::text LIKE '%"operations_admin"%')
+       )`,
+    [organizationId]
   );
-  
+
   const notifications = [];
-  for (const admin of superAdmins.rows) {
+  for (const admin of orgAdmins.rows) {
     const notification = await createNotification(pool, {
       user_id: admin.id,
       task_id: task.id,
@@ -347,26 +394,39 @@ async function notifyTaskFlagged(pool, task, assignedUser) {
     });
     notifications.push(notification);
   }
-  
+
   return notifications;
 }
 
 /**
- * Notify super admins about overtime work request
+ * Notify org-scoped admins about overtime work request.
+ * System owner (platform) must not receive company notifications; only admins
+ * in the same organization as the task are notified.
  * @param {Object} pool - Database connection pool
  * @param {Object} overtimeRequest - Overtime request object
- * @param {Object} task - Task object
+ * @param {Object} task - Task object (must include organization_id)
  * @param {Object} user - User who requested overtime
  */
 async function notifyOvertimeRequest(pool, overtimeRequest, task, user) {
   try {
-    // Get all super admins
-    const superAdmins = await pool.query(
-      `SELECT id, full_name, email, username FROM users WHERE role = 'super_admin' AND is_active = TRUE`
+    const organizationId = task.organization_id ?? null;
+    if (!organizationId) {
+      return [];
+    }
+
+    // Only notify admins that belong to the task's organization (excludes platform system owners)
+    const orgAdmins = await pool.query(
+      `SELECT id, full_name, email, username FROM users 
+       WHERE organization_id = $1
+         AND is_active = true
+         AND (
+           role IN ('admin', 'super_admin')
+           OR (roles IS NOT NULL AND roles::text LIKE '%"operations_admin"%')
+         )`,
+      [organizationId]
     );
 
-    if (superAdmins.rows.length === 0) {
-      console.warn('No super admins found to notify about overtime request');
+    if (orgAdmins.rows.length === 0) {
       return [];
     }
 
@@ -377,15 +437,15 @@ async function notifyOvertimeRequest(pool, overtimeRequest, task, user) {
       asset_name: task.asset_name || 'Unknown Asset'
     };
 
-    const requestTypeText = overtimeRequest.request_type === 'start_after_hours' 
-      ? 'starting a task' 
+    const requestTypeText = overtimeRequest.request_type === 'start_after_hours'
+      ? 'starting a task'
       : 'completing a task';
 
-    for (const superAdmin of superAdmins.rows) {
+    for (const admin of orgAdmins.rows) {
       const message = `${user.full_name || user.username} is requesting approval for ${requestTypeText} outside working hours (07:00-16:00). Task: ${task.task_code}`;
 
       const notification = await createNotification(pool, {
-        user_id: superAdmin.id,
+        user_id: admin.id,
         task_id: task.id,
         type: 'overtime_request',
         title: 'Overtime Work - Acknowledgement Required',
@@ -407,7 +467,7 @@ async function notifyOvertimeRequest(pool, overtimeRequest, task, user) {
       notifications.push(notification);
     }
 
-    console.log(`Overtime request notifications sent to ${superAdmins.rows.length} super admin(s) for task ${task.task_code}`);
+    console.log(`Overtime request notifications sent to ${orgAdmins.rows.length} org admin(s) for task ${task.task_code}`);
     return notifications;
   } catch (error) {
     console.error('Error sending overtime request notifications:', error);
@@ -456,9 +516,10 @@ async function scheduleReminders(pool) {
     // Find tasks scheduled exactly 3 days from now that haven't been completed
     // Get all assigned users for each task
     const tasks = await pool.query(
-      `SELECT DISTINCT t.*, a.asset_name
+      `SELECT DISTINCT t.*, a.asset_name, ct.template_name
        FROM tasks t
        LEFT JOIN assets a ON t.asset_id = a.id
+       LEFT JOIN checklist_templates ct ON t.checklist_template_id = ct.id
        WHERE t.scheduled_date = $1
          AND t.status NOT IN ('completed', 'cancelled')
          AND EXISTS (

@@ -5,11 +5,12 @@ const fs = require('fs');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { requireFeature } = require('../middleware/requireFeature');
-const { 
-  getOrganizationSlugFromRequest, 
-  getStoragePath, 
+const { getDb } = require('../middleware/tenantContext');
+const {
+  getOrganizationSlugFromRequest,
+  getStoragePath,
   getFileUrl,
-  ensureCompanyDirs 
+  ensureCompanyDirs
 } = require('../utils/organizationStorage');
 
 module.exports = (pool) => {
@@ -70,7 +71,6 @@ module.exports = (pool) => {
       }
       
       // Use getDb to ensure RLS is applied
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
       const result = await db.query('SELECT * FROM checklist_templates WHERE organization_id = $1 ORDER BY template_code', [organizationId]);
       // Parse JSONB fields for all templates
@@ -103,9 +103,8 @@ module.exports = (pool) => {
       }
       
       // Use getDb to ensure RLS is applied
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
-      
+
       const result = await db.query('SELECT * FROM checklist_templates WHERE id = $1', [req.params.id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Checklist template not found' });
@@ -140,9 +139,8 @@ module.exports = (pool) => {
       }
       
       // Use getDb to ensure RLS is applied
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
-      
+
       const result = await db.query(
         'SELECT * FROM checklist_templates WHERE asset_type = $1 ORDER BY template_code',
         [req.params.assetType]
@@ -187,6 +185,7 @@ module.exports = (pool) => {
       try {
         // Lazy load templateParser to avoid circular dependency issues
         const { parseTemplateFile } = require('../utils/templateParser');
+        const db = getDb(req, pool);
         // Parse the file
         const parsedData = await parseTemplateFile(filePath, asset_type, asset_prefix, fileName);
 
@@ -204,7 +203,7 @@ module.exports = (pool) => {
         };
 
         // Check if template code already exists
-        const existing = await pool.query(
+        const existing = await db.query(
           'SELECT id FROM checklist_templates WHERE template_code = $1',
           [templateData.template_code]
         );
@@ -220,9 +219,9 @@ module.exports = (pool) => {
         let result;
         if (existing.rows.length > 0 && req.body.update_existing) {
           // Update existing template
-          result = await pool.query(
-            `UPDATE checklist_templates 
-             SET template_name = $1, description = $2, asset_type = $3, task_type = $4, 
+          result = await db.query(
+            `UPDATE checklist_templates
+             SET template_name = $1, description = $2, asset_type = $3, task_type = $4,
                  frequency = $5, checklist_structure = $6::jsonb, updated_at = CURRENT_TIMESTAMP
              WHERE template_code = $7
              RETURNING *`,
@@ -238,7 +237,7 @@ module.exports = (pool) => {
           );
         } else {
           // Create new template
-          result = await pool.query(
+          result = await db.query(
             `INSERT INTO checklist_templates 
              (template_code, template_name, description, asset_type, task_type, frequency, 
               checklist_structure, validation_rules, cm_generation_rules)
@@ -288,6 +287,7 @@ module.exports = (pool) => {
   // Create checklist template (manual creation)
   router.post('/', requireAuth, requirePermission('templates:create'), async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const {
         template_code,
         template_name,
@@ -300,7 +300,7 @@ module.exports = (pool) => {
         cm_generation_rules
       } = req.body;
 
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO checklist_templates (
           template_code, template_name, description, asset_type, task_type, frequency,
           checklist_structure, validation_rules, cm_generation_rules
@@ -330,6 +330,7 @@ module.exports = (pool) => {
   // Update checklist template
   router.put('/:id', requireAuth, requirePermission('templates:update'), async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const {
         template_code,
         template_name,
@@ -343,7 +344,7 @@ module.exports = (pool) => {
       } = req.body;
 
       // Check if template exists
-      const existing = await pool.query(
+      const existing = await db.query(
         'SELECT id, template_code FROM checklist_templates WHERE id = $1',
         [req.params.id]
       );
@@ -354,7 +355,7 @@ module.exports = (pool) => {
 
       // Check if template_code is being changed and if new code already exists
       if (template_code && template_code !== existing.rows[0].template_code) {
-        const codeCheck = await pool.query(
+        const codeCheck = await db.query(
           'SELECT id FROM checklist_templates WHERE template_code = $1 AND id != $2',
           [template_code, req.params.id]
         );
@@ -363,7 +364,7 @@ module.exports = (pool) => {
         }
       }
 
-      const result = await pool.query(
+      const result = await db.query(
         `UPDATE checklist_templates 
          SET template_code = COALESCE($1, template_code),
              template_name = COALESCE($2, template_name),
@@ -415,7 +416,8 @@ module.exports = (pool) => {
   // Delete checklist template
   router.delete('/:id', requireAuth, requirePermission('templates:delete'), async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         'DELETE FROM checklist_templates WHERE id = $1 RETURNING id, template_code',
         [req.params.id]
       );
@@ -440,10 +442,11 @@ module.exports = (pool) => {
    */
   router.patch('/:id/metadata', requireAuth, requirePermission('templates:update'), async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { last_revision_date, checklist_made_by, last_revision_approved_by } = req.body;
       const templateId = req.params.id;
 
-      const result = await pool.query(
+      const result = await db.query(
         'SELECT id, checklist_structure FROM checklist_templates WHERE id = $1',
         [templateId]
       );
@@ -474,7 +477,7 @@ module.exports = (pool) => {
         checklistStructure.metadata.last_revision_approved_by = last_revision_approved_by || '';
       }
 
-      const update = await pool.query(
+      const update = await db.query(
         `UPDATE checklist_templates
          SET checklist_structure = $1::jsonb, updated_at = CURRENT_TIMESTAMP
          WHERE id = $2

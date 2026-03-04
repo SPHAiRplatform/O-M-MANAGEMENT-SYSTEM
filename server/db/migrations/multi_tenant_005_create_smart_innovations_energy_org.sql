@@ -26,4 +26,4 @@ WHERE NOT EXISTS (
 );
 
 -- Add comment
-COMMENT ON TABLE organizations IS 'Organizations (tenants) using the SPHAiRPlatform system. Default organization: Smart Innovations Energy (id: 00000000-0000-0000-0000-000000000001)';
+COMMENT ON TABLE organizations IS 'Organizations (tenants) using the SPHAiRDigital system. Default organization: Smart Innovations Energy (id: 00000000-0000-0000-0000-000000000001)';

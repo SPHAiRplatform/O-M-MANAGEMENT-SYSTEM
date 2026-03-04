@@ -1,5 +1,6 @@
 import axios from 'axios';
 import offlineApi from '../utils/offlineApi';
+import offlineStorage from '../utils/offlineStorage';
 
 // Determine API URL dynamically
 // If REACT_APP_API_URL is set, use it
@@ -141,26 +142,65 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor for error handling and activity tracking
+// Add response interceptor for error handling, activity tracking, and offline caching
 api.interceptors.response.use(
   (response) => {
     console.log(`API Response: ${response.config.method.toUpperCase()} ${response.config.url}`, response.status);
-    
+
     // Only track successful API calls as activity (exclude auth endpoints and work context checks)
     // This prevents failed requests from resetting the inactivity timer
-    if (!response.config.url.includes('/auth/me') && 
+    if (!response.config.url.includes('/auth/me') &&
         !response.config.url.includes('/auth/login') &&
         !response.config.url.includes('/tasks?status=in_progress') && // Don't track work context checks
         window.trackApiActivity) {
       window.trackApiActivity();
     }
-    
+
+    // Cache GET responses to IndexedDB for offline fallback
+    if (response.config.method === 'get' && response.status === 200) {
+      const cacheKey = `api_${response.config.url}`;
+      offlineStorage.setCache(cacheKey, {
+        data: response.data,
+        status: response.status,
+        cachedAt: Date.now()
+      }).catch(() => { /* ignore cache write errors */ });
+    }
+
     return response;
   },
-  (error) => {
+  async (error) => {
     // Don't track failed requests as activity - this prevents the feedback loop
     // Only successful requests should reset the inactivity timer
-    
+
+    // If it's a network error on a GET request, try to serve from IndexedDB cache
+    const isNetworkError = !error.response && (
+      !navigator.onLine ||
+      error.message.includes('Network Error') ||
+      error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNABORTED'
+    );
+
+    if (isNetworkError && error.config && error.config.method === 'get') {
+      try {
+        const cacheKey = `api_${error.config.url}`;
+        const cached = await offlineStorage.getCache(cacheKey);
+        if (cached && cached.data) {
+          console.log(`Serving cached response for: ${error.config.url}`);
+          return {
+            data: cached.data,
+            status: cached.status || 200,
+            statusText: 'OK (Cached)',
+            headers: {},
+            config: error.config,
+            _fromCache: true,
+            _cachedAt: cached.cachedAt
+          };
+        }
+      } catch (cacheError) {
+        // Cache read failed, fall through to normal error handling
+      }
+    }
+
     if (error.code === 'ECONNABORTED') {
       console.error('API Request Timeout:', error.config?.url);
     } else if (error.response) {
@@ -188,6 +228,10 @@ export const logout = () => api.post('/auth/logout');
 export const getCurrentUser = () => api.get('/auth/me');
 export const changePassword = (currentPassword, newPassword) => 
   api.post('/auth/change-password', { currentPassword, newPassword });
+export const forgotPassword = (email) =>
+  api.post('/auth/forgot-password', { email });
+export const resetPassword = (email, code, newPassword) =>
+  api.post('/auth/reset-password', { email, code, newPassword });
 
 // Users (admin only)
 export const getUsers = () => api.get('/users');
@@ -219,7 +263,10 @@ export const updateChecklistTemplate = (id, data) => api.put(`/checklist-templat
 export const deleteChecklistTemplate = (id) => api.delete(`/checklist-templates/${id}`);
 
 // Helper function to make API calls offline-aware
-const makeOfflineAware = (apiCall) => {
+// method: HTTP method string (GET, POST, PUT, PATCH, DELETE)
+// urlBuilder: function that takes args and returns the URL path
+// dataExtractor: optional function that takes args and returns the request body
+const makeOfflineAware = (apiCall, method = 'POST', urlBuilder = null, dataExtractor = null) => {
   return async (...args) => {
     try {
       // Try normal API first
@@ -227,30 +274,14 @@ const makeOfflineAware = (apiCall) => {
     } catch (error) {
       // If it's a network error and we're offline, queue it
       if (!navigator.onLine || (!error.response && (error.message.includes('Network Error') || error.code === 'ERR_NETWORK'))) {
-        console.log('Network error detected, queueing request for offline sync');
-        
-        // Extract URL and data from the API call
-        let url = '';
-        let data = {};
-        let method = 'GET';
-        
-        if (typeof args[0] === 'string') {
-          url = args[0];
-        }
-        if (args[1]) {
-          data = args[1];
-        }
-        
-        // Determine method from function name
-        const funcName = apiCall.toString();
-        if (funcName.includes('patch')) method = 'PATCH';
-        else if (funcName.includes('post')) method = 'POST';
-        else if (funcName.includes('put')) method = 'PUT';
-        else if (funcName.includes('delete')) method = 'DELETE';
-        
+        console.log(`Offline: queueing ${method} request for sync`);
+
+        const url = urlBuilder ? urlBuilder(...args) : '';
+        const data = dataExtractor ? dataExtractor(...args) : (typeof args[0] === 'object' ? args[0] : {});
+
         // Use offline API to queue the request
         const offlineResponse = await offlineApi.request({ method, url, data });
-        
+
         // Return a response-like object
         return {
           data: offlineResponse.data,
@@ -268,15 +299,38 @@ const makeOfflineAware = (apiCall) => {
 // Tasks
 export const getTasks = (params, config = {}) => api.get('/tasks', { params, ...config });
 export const getTask = (id) => api.get(`/tasks/${id}`);
-export const createTask = makeOfflineAware((data) => api.post('/tasks', data));
-export const startTask = makeOfflineAware((id) => api.patch(`/tasks/${id}/start`));
+export const deleteTask = (id) => api.delete(`/tasks/${id}`);
+export const bulkDeleteTasks = (ids) => api.post('/tasks/bulk-delete', { ids });
+export const createTask = makeOfflineAware(
+  (data) => api.post('/tasks', data),
+  'POST', () => '/tasks', (data) => data
+);
+export const startTask = makeOfflineAware(
+  (id) => api.patch(`/tasks/${id}/start`),
+  'PATCH', (id) => `/tasks/${id}/start`
+);
 export const getOvertimeRequests = (params) => api.get('/overtime-requests', { params });
 export const getOvertimeRequest = (id) => api.get(`/overtime-requests/${id}`);
-export const approveOvertimeRequest = (id) => api.patch(`/overtime-requests/${id}/approve`);
-export const rejectOvertimeRequest = (id, rejectionReason) => api.patch(`/overtime-requests/${id}/reject`, { rejection_reason: rejectionReason });
-export const pauseTask = makeOfflineAware((id, pauseReason) => api.patch(`/tasks/${id}/pause`, { pause_reason: pauseReason }));
-export const resumeTask = makeOfflineAware((id) => api.patch(`/tasks/${id}/resume`));
-export const completeTask = makeOfflineAware((id, data) => api.patch(`/tasks/${id}/complete`, data));
+export const approveOvertimeRequest = makeOfflineAware(
+  (id) => api.patch(`/overtime-requests/${id}/approve`),
+  'PATCH', (id) => `/overtime-requests/${id}/approve`
+);
+export const rejectOvertimeRequest = makeOfflineAware(
+  (id, rejectionReason) => api.patch(`/overtime-requests/${id}/reject`, { rejection_reason: rejectionReason }),
+  'PATCH', (id) => `/overtime-requests/${id}/reject`, (id, rejectionReason) => ({ rejection_reason: rejectionReason })
+);
+export const pauseTask = makeOfflineAware(
+  (id, pauseReason) => api.patch(`/tasks/${id}/pause`, { pause_reason: pauseReason }),
+  'PATCH', (id) => `/tasks/${id}/pause`, (id, pauseReason) => ({ pause_reason: pauseReason })
+);
+export const resumeTask = makeOfflineAware(
+  (id) => api.patch(`/tasks/${id}/resume`),
+  'PATCH', (id) => `/tasks/${id}/resume`
+);
+export const completeTask = makeOfflineAware(
+  (id, data) => api.patch(`/tasks/${id}/complete`, data),
+  'PATCH', (id) => `/tasks/${id}/complete`, (id, data) => data
+);
 // NOTE: Do NOT default to "word" here. If format is omitted, the server will
 // auto-select Word if available, otherwise Excel (based on template files).
 export const downloadTaskReport = (id, format = null) => {
@@ -297,18 +351,33 @@ export const downloadTaskReport = (id, format = null) => {
 // Checklist Responses
 export const getChecklistResponses = (params) => api.get('/checklist-responses', { params });
 export const getChecklistResponse = (id) => api.get(`/checklist-responses/${id}`);
-export const submitChecklistResponse = makeOfflineAware((data) => api.post('/checklist-responses', data));
+export const submitChecklistResponse = makeOfflineAware(
+  (data) => api.post('/checklist-responses', data),
+  'POST', () => '/checklist-responses', (data) => data
+);
 
 // Draft Checklist Responses (Auto-save)
-export const saveDraftResponse = (data) => api.post('/checklist-responses/draft', data);
+export const saveDraftResponse = makeOfflineAware(
+  (data) => api.post('/checklist-responses/draft', data),
+  'POST', () => '/checklist-responses/draft', (data) => data
+);
 export const getDraftResponse = (taskId) => api.get(`/checklist-responses/draft/${taskId}`);
-export const deleteDraftResponse = (taskId) => api.delete(`/checklist-responses/draft/${taskId}`);
+export const deleteDraftResponse = makeOfflineAware(
+  (taskId) => api.delete(`/checklist-responses/draft/${taskId}`),
+  'DELETE', (taskId) => `/checklist-responses/draft/${taskId}`
+);
 
 // CM Letters
 export const getCMLetters = (params) => api.get('/cm-letters', { params });
 export const getCMLetter = (id) => api.get(`/cm-letters/${id}`);
-export const updateCMLetterStatus = (id, data) => api.patch(`/cm-letters/${id}/status`, data);
-export const updateCMLetterFaultLog = (id, data) => api.patch(`/cm-letters/${id}/fault-log`, data);
+export const updateCMLetterStatus = makeOfflineAware(
+  (id, data) => api.patch(`/cm-letters/${id}/status`, data),
+  'PATCH', (id) => `/cm-letters/${id}/status`, (id, data) => data
+);
+export const updateCMLetterFaultLog = makeOfflineAware(
+  (id, data) => api.patch(`/cm-letters/${id}/fault-log`, data),
+  'PATCH', (id) => `/cm-letters/${id}/fault-log`, (id, data) => data
+);
 export const getPlantMapData = async () => {
   try {
     const response = await axios.get(`${getApiBaseUrl()}/plant/map-data`, {
@@ -340,10 +409,12 @@ export const getPlantMapStructure = async () => {
 };
 
 // Save plant map structure to server
-export const savePlantMapStructure = async (structure) => {
+export const savePlantMapStructure = async (structure, labels = null) => {
   try {
-    const response = await axios.post(`${getApiBaseUrl()}/plant/structure`, 
-      { structure },
+    const body = { structure };
+    if (labels) body.labels = labels;
+    const response = await axios.post(`${getApiBaseUrl()}/plant/structure`,
+      body,
       {
         withCredentials: true,
         headers: {
@@ -424,6 +495,20 @@ export const resetCycle = async (taskType) => {
     return response.data;
   } catch (error) {
     console.error('Error resetting cycle:', error);
+    throw error;
+  }
+};
+
+export const clearCycleToZero = async (taskType) => {
+  try {
+    const response = await axios.post(
+      `${getApiBaseUrl()}/plant/cycles/${taskType}/clear`,
+      {},
+      { withCredentials: true }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error clearing cycle to zero:', error);
     throw error;
   }
 };
@@ -517,7 +602,10 @@ export const downloadFaultLog = async (period = 'all', params = {}) => {
 
 // Inventory
 export const getInventoryItems = (params) => api.get('/inventory/items', { params });
-export const importInventoryFromExcel = () => api.post('/inventory/import');
+export const importInventoryFromExcel = makeOfflineAware(
+  () => api.post('/inventory/import'),
+  'POST', () => '/inventory/import'
+);
 export const downloadInventoryExcel = async () => {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/inventory/download`;
@@ -586,19 +674,40 @@ export const downloadInventoryExcel = async () => {
     throw error;
   }
 };
-export const adjustInventory = (data) => api.post('/inventory/adjust', data);
-export const consumeInventory = (data) => api.post('/inventory/consume', data);
+export const adjustInventory = makeOfflineAware(
+  (data) => api.post('/inventory/adjust', data),
+  'POST', () => '/inventory/adjust', (data) => data
+);
+export const consumeInventory = makeOfflineAware(
+  (data) => api.post('/inventory/consume', data),
+  'POST', () => '/inventory/consume', (data) => data
+);
 export const getInventorySlips = () => api.get('/inventory/slips');
 export const getInventorySlip = (id) => api.get(`/inventory/slips/${id}`);
 export const getSparesUsage = (params) => api.get('/inventory/usage', { params });
-export const createInventoryItem = (data) => api.post('/inventory/items', data);
-export const updateInventoryItem = (itemCode, data) => api.put(`/inventory/items/${itemCode}`, data);
+export const createInventoryItem = makeOfflineAware(
+  (data) => api.post('/inventory/items', data),
+  'POST', () => '/inventory/items', (data) => data
+);
+export const updateInventoryItem = makeOfflineAware(
+  (itemCode, data) => api.put(`/inventory/items/${itemCode}`, data),
+  'PUT', (itemCode) => `/inventory/items/${itemCode}`, (itemCode, data) => data
+);
 
 
 // Task Locking API
-export const lockTask = (id, data) => api.patch(`/tasks/${id}/lock`, data);
-export const unlockTask = (id) => api.patch(`/tasks/${id}/unlock`);
-export const updateTask = (id, data) => api.put(`/tasks/${id}`, data);
+export const lockTask = makeOfflineAware(
+  (id, data) => api.patch(`/tasks/${id}/lock`, data),
+  'PATCH', (id) => `/tasks/${id}/lock`, (id, data) => data
+);
+export const unlockTask = makeOfflineAware(
+  (id) => api.patch(`/tasks/${id}/unlock`),
+  'PATCH', (id) => `/tasks/${id}/unlock`
+);
+export const updateTask = makeOfflineAware(
+  (id, data) => api.put(`/tasks/${id}`, data),
+  'PUT', (id) => `/tasks/${id}`, (id, data) => data
+);
 
 // Profile API
 export const getProfile = () => api.get('/users/profile/me');
@@ -696,24 +805,54 @@ export const removeProfileImage = async () => {
 // Early Completion Requests API
 export const getEarlyCompletionRequests = (taskId) => api.get(`/early-completion-requests/task/${taskId}`);
 export const getPendingEarlyCompletionRequests = () => api.get('/early-completion-requests/pending');
-export const createEarlyCompletionRequest = (data) => api.post('/early-completion-requests', data);
-export const approveEarlyCompletionRequest = (id) => api.post(`/early-completion-requests/${id}/approve`);
-export const rejectEarlyCompletionRequest = (id, data) => api.post(`/early-completion-requests/${id}/reject`, data);
+export const createEarlyCompletionRequest = makeOfflineAware(
+  (data) => api.post('/early-completion-requests', data),
+  'POST', () => '/early-completion-requests', (data) => data
+);
+export const approveEarlyCompletionRequest = makeOfflineAware(
+  (id) => api.post(`/early-completion-requests/${id}/approve`),
+  'POST', (id) => `/early-completion-requests/${id}/approve`
+);
+export const rejectEarlyCompletionRequest = makeOfflineAware(
+  (id, data) => api.post(`/early-completion-requests/${id}/reject`, data),
+  'POST', (id) => `/early-completion-requests/${id}/reject`, (id, data) => data
+);
 
 // Notifications API
 export const getNotifications = (params) => api.get('/notifications', { params });
 export const getUnreadNotificationCount = () => api.get('/notifications/unread-count');
-export const markNotificationAsRead = (id) => api.patch(`/notifications/${id}/read`);
-export const markAllNotificationsAsRead = () => api.patch('/notifications/read-all');
-export const deleteNotification = (id) => api.delete(`/notifications/${id}`);
+export const markNotificationAsRead = makeOfflineAware(
+  (id) => api.patch(`/notifications/${id}/read`),
+  'PATCH', (id) => `/notifications/${id}/read`
+);
+export const markAllNotificationsAsRead = makeOfflineAware(
+  () => api.patch('/notifications/read-all'),
+  'PATCH', () => '/notifications/read-all'
+);
+export const deleteNotification = makeOfflineAware(
+  (id) => api.delete(`/notifications/${id}`),
+  'DELETE', (id) => `/notifications/${id}`
+);
 
 // Calendar API
 export const getCalendarEvents = (params) => api.get('/calendar', { params });
 export const getCalendarEvent = (id) => api.get(`/calendar/${id}`);
 export const getCalendarEventsByDate = (date) => api.get(`/calendar/date/${date}`);
-export const createCalendarEvent = (data) => api.post('/calendar', data);
-export const updateCalendarEvent = (id, data) => api.put(`/calendar/${id}`, data);
-export const deleteCalendarEvent = (id) => api.delete(`/calendar/${id}`);
+export const createCalendarEvent = makeOfflineAware(
+  (data) => api.post('/calendar', data),
+  'POST', () => '/calendar', (data) => data
+);
+export const updateCalendarEvent = makeOfflineAware(
+  (id, data) => api.put(`/calendar/${id}`, data),
+  'PUT', (id) => `/calendar/${id}`, (id, data) => data
+);
+export const deleteCalendarEvent = makeOfflineAware(
+  (id) => api.delete(`/calendar/${id}`),
+  'DELETE', (id) => `/calendar/${id}`
+);
+
+export const getCalendarLegend = () => api.get('/calendar/legend');
+export const putCalendarLegend = (legend) => api.put('/calendar/legend', { legend });
 
 /** Upload year calendar Excel (system owner only). Imports events and saves template for download. */
 export const uploadYearCalendar = async (file) => {
@@ -794,6 +933,25 @@ export const submitFeedback = async (data) => {
     console.error('Error submitting feedback:', error);
     throw error;
   }
+};
+
+export const getContactEmail = async () => {
+  const base = getApiBaseUrl();
+  const response = await axios.get(`${base}/feedback/contact-email`, { withCredentials: true });
+  return response.data;
+};
+
+/** Platform settings (system owner only). */
+export const getPlatformSettings = async () => {
+  const base = getApiBaseUrl();
+  const response = await axios.get(`${base}/platform/settings`, { withCredentials: true });
+  return response.data;
+};
+
+export const updatePlatformSettings = async (settings) => {
+  const base = getApiBaseUrl();
+  const response = await axios.put(`${base}/platform/settings`, settings, { withCredentials: true });
+  return response.data;
 };
 
 export default api;

@@ -1,95 +1,105 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   getCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
-  uploadYearCalendar
+  uploadYearCalendar,
+  getCalendarLegend,
+  putCalendarLegend
 } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { ErrorAlert } from './ErrorAlert';
+import { ConfirmDialog } from './ConfirmDialog';
 import './Calendar.css';
 
-// Color mapping for different task frequencies (from Excel - 100% match)
-const FREQUENCY_COLORS = {
-  'weekly': '#ffff00',        // Yellow - WEEKLY
-  'monthly': '#92d050',        // Green - MONTHLY
-  'quarterly': '#00b0f0',      // Blue - QUARTERLY
-  'biannually': '#BFBFBF',     // Light Grey - BI-ANNUAL
-  'bi-annually': '#BFBFBF',    // Light Grey - BI-ANNUAL
-  'bi-annual': '#BFBFBF',      // Light Grey - BI-ANNUAL
-  'annually': '#CC5C0B',       // Orange/Brown - ANNUAL
-  'annual': '#CC5C0B',         // Orange/Brown - ANNUAL
-  'bimonthly': '#F9B380',      // Light Orange - BI-MONTHLY
-  'bi-monthly': '#F9B380',    // Light Orange - BI-MONTHLY
-  'public holiday': '#808080', // Grey - PUBLIC HOLIDAY
-  'holiday': '#808080',        // Grey - PUBLIC HOLIDAY
-  'public': '#808080'          // Grey - PUBLIC HOLIDAY
+const CANONICAL_KEYS = [
+  'weekly', 'monthly', 'quarterly', 'bi-monthly', 'bi-annually', 'annually', 'public holiday'
+];
+
+const DEFAULT_LEGEND_CONFIG = {
+  'weekly':         { color: '#ffff00', label: 'Weekly' },
+  'monthly':        { color: '#92d050', label: 'Monthly' },
+  'quarterly':      { color: '#00b0f0', label: 'Quarterly' },
+  'bi-monthly':     { color: '#F9B380', label: 'Bi-Monthly' },
+  'bi-annually':    { color: '#BFBFBF', label: 'Bi-Annual' },
+  'annually':       { color: '#CC5C0B', label: 'Annual' },
+  'public holiday': { color: '#808080', label: 'Holiday' }
 };
 
-function getEventColor(event) {
-  // Check for "Complete Outstanding PM's and reports" - return special marker
+const FREQUENCY_ALIAS_MAP = {
+  'weekly': 'weekly',
+  'monthly': 'monthly',
+  'quarterly': 'quarterly',
+  'quaterly': 'quarterly',
+  'bi-monthly': 'bi-monthly',
+  'bimonthly': 'bi-monthly',
+  'bi-annually': 'bi-annually',
+  'biannually': 'bi-annually',
+  'bi-annual': 'bi-annually',
+  'annually': 'annually',
+  'annual': 'annually',
+  'public holiday': 'public holiday',
+  'holiday': 'public holiday',
+  'public': 'public holiday'
+};
+
+function buildColorMap(legendConfig) {
+  const map = {};
+  for (const [alias, canonical] of Object.entries(FREQUENCY_ALIAS_MAP)) {
+    if (legendConfig[canonical]) {
+      map[alias] = legendConfig[canonical].color;
+    }
+  }
+  return map;
+}
+
+function getEventColor(event, colorMap) {
   if (event.task_title) {
-    const title = typeof event.task_title === 'string' 
-      ? event.task_title 
+    const title = typeof event.task_title === 'string'
+      ? event.task_title
       : (event.task_title.text || event.task_title.richText?.map(r => r.text).join('') || '');
     if (title.toLowerCase().includes("complete outstanding")) {
-      return 'OUTSTANDING_TASK'; // Special marker for outstanding tasks
+      return 'OUTSTANDING_TASK';
     }
   }
-  
-  // First check if frequency is explicitly set
+
   if (event.frequency) {
     const freq = event.frequency.toLowerCase();
-    if (FREQUENCY_COLORS[freq]) {
-      return FREQUENCY_COLORS[freq];
+    if (colorMap[freq]) {
+      return colorMap[freq];
     }
   }
-  
-  // Try to detect from task title
+
   if (event.task_title) {
-    const title = typeof event.task_title === 'string' 
+    const title = typeof event.task_title === 'string'
       ? event.task_title.toLowerCase()
       : (event.task_title.text || event.task_title.richText?.map(r => r.text).join('') || '').toLowerCase();
-    
-    // Check for public holiday first (most specific)
+
     if (title.includes('public holiday') || title.includes('holiday')) {
-      return FREQUENCY_COLORS['public holiday'];
+      return colorMap['public holiday'] || colorMap['holiday'] || '#808080';
     }
-    
-    // Check for bi-monthly
     if (title.includes('bi-monthly') || title.includes('bimonthly')) {
-      return FREQUENCY_COLORS['bi-monthly'];
+      return colorMap['bi-monthly'] || colorMap['bimonthly'] || '#F9B380';
     }
-    
-    // Check for bi-annually
     if (title.includes('bi-annually') || title.includes('biannually') || title.includes('bi-annual')) {
-      return FREQUENCY_COLORS['bi-annually'];
+      return colorMap['bi-annually'] || colorMap['biannually'] || '#BFBFBF';
     }
-    
-    // Check for annually/annual
     if (title.includes('annually') || title.includes('annual')) {
-      return FREQUENCY_COLORS['annually'];
+      return colorMap['annually'] || colorMap['annual'] || '#CC5C0B';
     }
-    
-    // Check for quarterly
     if (title.includes('quarterly') || title.includes('quaterly')) {
-      return FREQUENCY_COLORS['quarterly'];
+      return colorMap['quarterly'] || colorMap['quaterly'] || '#00b0f0';
     }
-    
-    // Check for monthly
     if (title.includes('monthly')) {
-      return FREQUENCY_COLORS['monthly'];
+      return colorMap['monthly'] || '#92d050';
     }
-    
-    // Check for weekly
     if (title.includes('weekly')) {
-      return FREQUENCY_COLORS['weekly'];
+      return colorMap['weekly'] || '#ffff00';
     }
   }
-  
-  // Default color if no match
+
   return '#3498db';
 }
 
@@ -143,12 +153,19 @@ function Calendar() {
   });
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [legendConfig, setLegendConfig] = useState(DEFAULT_LEGEND_CONFIG);
+  const [showLegendModal, setShowLegendModal] = useState(false);
+  const [legendForm, setLegendForm] = useState({});
+  const [legendSaving, setLegendSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   const roles = user?.roles || (user?.role ? [user.role] : []);
   const isSystemOwner = roles.includes('system_owner') || roles.includes('super_admin') ||
     user?.role === 'system_owner' || user?.role === 'super_admin';
   const showUploadButton = isSystemOwner && hasOrganizationContext(user);
+
+  const colorMap = useMemo(() => buildColorMap(legendConfig), [legendConfig]);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -177,6 +194,17 @@ function Calendar() {
       setLoading(false);
     }
   }, [currentYear, currentMonth, user, authLoading]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (hasOrganizationContext(user)) {
+      getCalendarLegend()
+        .then(res => {
+          if (res.data?.legend) setLegendConfig(res.data.legend);
+        })
+        .catch(() => {});
+    }
+  }, [user, authLoading]);
 
   // Helper to format date without UTC conversion
   const formatLocalDate = (date) => {
@@ -285,24 +313,30 @@ function Calendar() {
     }
   };
 
-  const handleDeleteEvent = async () => {
-    if (!editingEvent || !window.confirm('Are you sure you want to delete this event?')) {
-      return;
-    }
-    
-    try {
-      await deleteCalendarEvent(editingEvent.id);
-      await loadEvents();
-      setShowEventModal(false);
-      setEditingEvent(null);
-      setSelectedDate(null);
-    } catch (err) {
-      console.error('Error deleting event:', err);
-      setError({
-        message: 'Failed to delete event. Please try again.',
-        details: err.response?.data?.error || err.message
-      });
-    }
+  const handleDeleteEvent = () => {
+    if (!editingEvent) return;
+
+    setConfirmDialog({
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteCalendarEvent(editingEvent.id);
+          await loadEvents();
+          setShowEventModal(false);
+          setEditingEvent(null);
+          setSelectedDate(null);
+        } catch (err) {
+          console.error('Error deleting event:', err);
+          setError({
+            message: 'Failed to delete event. Please try again.',
+            details: err.response?.data?.error || err.message
+          });
+        }
+      }
+    });
   };
   
   const handleCloseModal = () => {
@@ -424,6 +458,10 @@ function Calendar() {
         onClose={() => setError(null)}
         title="Calendar Error"
       />
+      <ConfirmDialog
+        dialog={confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+      />
       <div className="calendar-header">
         <h1>Year Calendar</h1>
         <div className="calendar-controls">
@@ -502,7 +540,7 @@ function Calendar() {
                   <div className="day-number">{day}</div>
                     <div className="day-events">
                       {dayEvents.slice(0, 3).map((event, eventIndex) => {
-                        const eventColor = getEventColor(event);
+                        const eventColor = getEventColor(event, colorMap);
                         // Extract task title safely (handle object formats)
                         let taskTitle = event.task_title;
                         if (taskTitle && typeof taskTitle === 'object') {
@@ -542,41 +580,36 @@ function Calendar() {
           </div>
         </div>
         
-        {/* Legend - Compact Horizontal */}
+        {/* Legend - Compact Horizontal (driven by legendConfig) */}
         <div className="calendar-legend-compact">
           <div className="legend-trigger" onClick={() => setLegendExpanded(!legendExpanded)} title="Show/Hide Legend">
             <span className="legend-icon">Legend</span>
           </div>
           {legendExpanded && (
             <div className="legend-items-horizontal">
-              <div className="legend-item-compact" title="Weekly">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS.weekly }}></span>
-                <span className="legend-label-compact">W</span>
-              </div>
-              <div className="legend-item-compact" title="Monthly">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS.monthly }}></span>
-                <span className="legend-label-compact">M</span>
-              </div>
-              <div className="legend-item-compact" title="Quarterly">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS.quarterly }}></span>
-                <span className="legend-label-compact">Q</span>
-              </div>
-              <div className="legend-item-compact" title="Bi-Monthly">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS['bi-monthly'] }}></span>
-                <span className="legend-label-compact">BM</span>
-              </div>
-              <div className="legend-item-compact" title="Bi-Annually">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS['bi-annually'] }}></span>
-                <span className="legend-label-compact">BA</span>
-              </div>
-              <div className="legend-item-compact" title="Annually">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS.annually }}></span>
-                <span className="legend-label-compact">A</span>
-              </div>
-              <div className="legend-item-compact" title="Public Holiday">
-                <span className="legend-color-compact" style={{ backgroundColor: FREQUENCY_COLORS['public holiday'] }}></span>
-                <span className="legend-label-compact">PH</span>
-              </div>
+              {CANONICAL_KEYS.map(key => (
+                <div key={key} className="legend-item-compact">
+                  <span className="legend-color-compact" style={{ backgroundColor: legendConfig[key]?.color }}></span>
+                  <span className="legend-label-compact">{legendConfig[key]?.label}</span>
+                </div>
+              ))}
+              {isSystemOwner && hasOrganizationContext(user) && (
+                <div
+                  className="legend-item-compact legend-customize-btn"
+                  onClick={() => {
+                    const form = {};
+                    CANONICAL_KEYS.forEach(k => {
+                      form[k] = { color: legendConfig[k]?.color || '#000000', label: legendConfig[k]?.label || '' };
+                    });
+                    setLegendForm(form);
+                    setShowLegendModal(true);
+                  }}
+                  title="Customize legend colors and labels"
+                  style={{ cursor: 'pointer', marginTop: 4, borderTop: '1px solid #e0e0e0', paddingTop: 4 }}
+                >
+                  <span style={{ fontSize: 10, color: '#3498db', fontWeight: 600 }}>Customize</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -671,6 +704,94 @@ function Calendar() {
                   disabled={!eventForm.event_date || !eventForm.task_title}
                 >
                   {editingEvent ? 'Update' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLegendModal && (
+        <div className="modal-overlay" onClick={() => setShowLegendModal(false)}>
+          <div className="modal-content calendar-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2>Customize Legend</h2>
+              <button className="modal-close" onClick={() => setShowLegendModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: '#7f8c8d', margin: '0 0 16px' }}>
+                Set a color and display label for each task frequency. Changes apply to this organization only.
+              </p>
+              {CANONICAL_KEYS.map(key => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <input
+                    type="color"
+                    value={legendForm[key]?.color || '#000000'}
+                    onChange={(e) => setLegendForm(prev => ({
+                      ...prev,
+                      [key]: { ...prev[key], color: e.target.value }
+                    }))}
+                    style={{ width: 36, height: 32, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+                    title={`Color for ${key}`}
+                  />
+                  <input
+                    type="text"
+                    value={legendForm[key]?.label || ''}
+                    onChange={(e) => setLegendForm(prev => ({
+                      ...prev,
+                      [key]: { ...prev[key], label: e.target.value }
+                    }))}
+                    className="form-control"
+                    style={{ flex: 1 }}
+                    placeholder={`Label for ${key}`}
+                    maxLength={30}
+                  />
+                  <span style={{ fontSize: 10, color: '#95a5a6', minWidth: 80, textAlign: 'right' }}>{key}</span>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  const form = {};
+                  CANONICAL_KEYS.forEach(k => {
+                    form[k] = { color: DEFAULT_LEGEND_CONFIG[k].color, label: DEFAULT_LEGEND_CONFIG[k].label };
+                  });
+                  setLegendForm(form);
+                }}
+                title="Reset all to default colors and labels"
+              >
+                Reset
+              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+                <button className="btn btn-secondary" onClick={() => setShowLegendModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={legendSaving || CANONICAL_KEYS.some(k => !legendForm[k]?.color || !legendForm[k]?.label?.trim())}
+                  onClick={async () => {
+                    setLegendSaving(true);
+                    try {
+                      const res = await putCalendarLegend(legendForm);
+                      if (res.data?.legend) {
+                        setLegendConfig(res.data.legend);
+                      } else {
+                        setLegendConfig(legendForm);
+                      }
+                      setShowLegendModal(false);
+                    } catch (err) {
+                      setError({
+                        message: 'Failed to save legend customization.',
+                        details: err.response?.data?.error || err.message
+                      });
+                    } finally {
+                      setLegendSaving(false);
+                    }
+                  }}
+                >
+                  {legendSaving ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>

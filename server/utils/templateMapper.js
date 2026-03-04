@@ -66,11 +66,52 @@ function getTemplatePath(format, templateCode, assetType) {
     );
   }
 
-  // Find first existing template
+  // Find first existing template from explicit paths
   for (const templatePath of searchPaths) {
     if (fs.existsSync(templatePath)) {
       console.log(`Found template: ${templatePath}`);
       return templatePath;
+    }
+  }
+
+  // 4) Fuzzy match: scan template directories for files containing the asset type name
+  //    This handles asset types like scada, cctv, inverter, tracker, substation, etc.
+  //    without needing explicit mappings for each one.
+  if (normalizedAssetType) {
+    const fuzzyDirs = [
+      path.join(__dirname, `../templates/${formatDir}`),
+      path.join(__dirname, `../../Checksheets/${formatDir}`),
+      path.join(__dirname, '../../Checksheets')
+    ];
+
+    // Build search terms from asset type (e.g., "scada" -> ["scada"], "energy_meter" -> ["energy", "meter"])
+    const searchTerms = normalizedAssetType.split(/[_\-\s]+/).filter(t => t.length > 2);
+
+    for (const dir of fuzzyDirs) {
+      if (!fs.existsSync(dir)) continue;
+      try {
+        const files = fs.readdirSync(dir).filter(f => f.endsWith(`.${ext}`));
+        for (const file of files) {
+          const normalizedFile = file.toLowerCase();
+          // Match if ALL search terms appear in the filename
+          if (searchTerms.every(term => normalizedFile.includes(term))) {
+            const matched = path.join(dir, file);
+            console.log(`Found template (fuzzy match): ${matched}`);
+            return matched;
+          }
+        }
+        // Fallback: match if ANY search term appears
+        for (const file of files) {
+          const normalizedFile = file.toLowerCase();
+          if (searchTerms.some(term => normalizedFile.includes(term))) {
+            const matched = path.join(dir, file);
+            console.log(`Found template (partial match): ${matched}`);
+            return matched;
+          }
+        }
+      } catch (e) {
+        // Directory read error, skip
+      }
     }
   }
 

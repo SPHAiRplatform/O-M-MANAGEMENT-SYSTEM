@@ -5,7 +5,8 @@ const { parsePlantMap } = require('../utils/plantMapParser');
 const { requireAuth, requireAdmin, isAdmin, isSuperAdmin } = require('../middleware/auth');
 const { requireFeature } = require('../middleware/requireFeature');
 const { createNotification } = require('../utils/notifications');
-const { getCompanySubDir, getOrganizationSlugFromRequest } = require('../utils/organizationStorage');
+const { getCompanySubDir, getOrganizationSlugFromRequest, getOrganizationIdFromRequest } = require('../utils/organizationStorage');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -25,7 +26,8 @@ module.exports = (pool) => {
    * @param {string} organizationId - Organization ID (optional, can be null for system owners)
    * @returns {Promise<{success: boolean, error?: string, filePath?: string, skipped?: boolean}>}
    */
-  async function saveMapStructureToFile(req, structure, version, organizationId = null) {
+  async function saveMapStructureToFile(req, structure, version, organizationId = null, labels = null) {
+    const db = getDb(req, pool);
     try {
       // CRITICAL FIX: Get organizationSlug FIRST, before checking organizationId
       // This ensures system owners who have selected a company can still save files
@@ -36,7 +38,7 @@ module.exports = (pool) => {
       if (!organizationId) {
         if (req.session && req.session.userId) {
           try {
-            const userResult = await pool.query(
+            const userResult = await db.query(
               'SELECT organization_id, role, roles FROM users WHERE id = $1',
               [req.session.userId]
             );
@@ -90,6 +92,18 @@ module.exports = (pool) => {
         organization_id: organizationId, // Can be null for system owners
         organization_slug: organizationSlug
       };
+
+      // Include custom labels: use provided labels, or preserve existing ones from file
+      if (labels) {
+        mapData.labels = labels;
+      } else if (fs.existsSync(mapFilePath)) {
+        try {
+          const existingData = JSON.parse(fs.readFileSync(mapFilePath, 'utf8'));
+          if (existingData.labels) {
+            mapData.labels = existingData.labels;
+          }
+        } catch (_) { /* ignore parse errors */ }
+      }
 
       // Validate structure before saving
       if (!Array.isArray(structure)) {
@@ -172,9 +186,10 @@ module.exports = (pool) => {
               // Fall through to database fallback
             } else {
               console.log(`[PLANT] ✅ Loaded map structure from file (version ${mapData.version}) with ${mapData.structure.length} trackers`);
-              return res.json({ 
-                structure: mapData.structure, 
-                version: mapData.version || 0 
+              return res.json({
+                structure: mapData.structure,
+                version: mapData.version || 0,
+                labels: mapData.labels || null
               });
             }
           }
@@ -203,18 +218,19 @@ module.exports = (pool) => {
   // Save plant map structure to database
   router.post('/structure', requireAuth, async (req, res) => {
     try {
-      const { structure } = req.body;
-      
+      const db = getDb(req, pool);
+      const { structure, labels } = req.body;
+
       if (!Array.isArray(structure)) {
         return res.status(400).json({ error: 'Structure must be an array' });
       }
-      
+
       console.log(`[PLANT] Saving structure with ${structure.length} trackers`);
       
       // Get user's organization_id (if authenticated)
       let organizationId = null;
       if (req.session && req.session.userId) {
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT organization_id, role, roles FROM users WHERE id = $1',
           [req.session.userId]
         );
@@ -239,26 +255,26 @@ module.exports = (pool) => {
       }
       versionQuery += ' ORDER BY version DESC LIMIT 1';
       
-      const currentResult = await pool.query(versionQuery, versionParams);
+      const currentResult = await db.query(versionQuery, versionParams);
       
       const newVersion = currentResult.rows.length > 0 
         ? currentResult.rows[0].version + 1 
         : 1;
       
       // Insert new version
-      await pool.query(`
+      await db.query(`
         INSERT INTO plant_map_structure (structure_data, version, organization_id)
         VALUES ($1, $2, $3)
       `, [JSON.stringify(structure), newVersion, organizationId]);
       
       // Also save to company-scoped folder (if organization context exists)
-      const fileSaveResult = await saveMapStructureToFile(req, structure, newVersion, organizationId);
+      const fileSaveResult = await saveMapStructureToFile(req, structure, newVersion, organizationId, labels || null);
       if (!fileSaveResult.success && !fileSaveResult.skipped) {
         console.warn('[PLANT] ⚠️ File save failed (non-critical):', fileSaveResult.error);
       }
-      
+
       console.log(`[PLANT] Structure saved successfully, version ${newVersion}`);
-      
+
       res.json({ success: true, version: newVersion, count: structure.length });
     } catch (error) {
       console.error('[PLANT] Error saving structure:', error);
@@ -336,6 +352,7 @@ module.exports = (pool) => {
   // Submit tracker status request (any authenticated user)
   router.post('/tracker-status-request', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { tracker_ids, task_type, status_type, message } = req.body;
       const userId = req.session.userId;
 
@@ -367,7 +384,7 @@ module.exports = (pool) => {
       }
 
       // Check for duplicate request (same user, same trackers, same type, same status within last 30 seconds)
-      const duplicateCheck = await pool.query(
+      const duplicateCheck = await db.query(
         `SELECT id, created_at FROM tracker_status_requests 
          WHERE user_id = $1 
          AND tracker_ids = $2 
@@ -395,7 +412,7 @@ module.exports = (pool) => {
       }
 
       // Get user info including organization_id and roles
-      const userResult = await pool.query(
+      const userResult = await db.query(
         'SELECT full_name, username, organization_id, role, roles FROM users WHERE id = $1', 
         [userId]
       );
@@ -419,7 +436,7 @@ module.exports = (pool) => {
       // Create request
       // Note: tracker_ids is a TEXT[] array in PostgreSQL, so we pass it as an array
       // organization_id can be NULL for system_owner users
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO tracker_status_requests (user_id, organization_id, tracker_ids, task_type, status_type, message, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'pending')
          RETURNING *`,
@@ -428,38 +445,37 @@ module.exports = (pool) => {
 
       const request = result.rows[0];
 
-      // Get all admins and super admins (using DISTINCT to prevent duplicates)
-      // Check both legacy role column and new RBAC roles array
-      const adminsResult = await pool.query(
-        `SELECT DISTINCT id, full_name, username FROM users 
-         WHERE is_active = true
-         AND (
-           -- Legacy role check
-           role IN ('admin', 'super_admin')
-           OR
-           -- RBAC roles check (check for operations_admin, system_owner, or legacy admin roles)
-           (
-             roles IS NOT NULL 
+      // Only create in-app notifications for admins in the same organization (system owner must not receive company notifications)
+      const requestOrgId = request.organization_id ?? null;
+      let adminsResult = { rows: [] };
+      if (requestOrgId) {
+        adminsResult = await db.query(
+          `SELECT DISTINCT id, full_name, username FROM users 
+           WHERE is_active = true
+             AND organization_id = $1
              AND (
-               roles::text LIKE '%"operations_admin"%'
-               OR roles::text LIKE '%"system_owner"%'
-               OR roles::text LIKE '%"admin"%'
-               OR roles::text LIKE '%"super_admin"%'
-             )
-           )
-         )`
-      );
-      
+               role IN ('admin', 'super_admin')
+               OR (
+                 roles IS NOT NULL 
+                 AND (
+                   roles::text LIKE '%"operations_admin"%'
+                   OR roles::text LIKE '%"admin"%'
+                   OR roles::text LIKE '%"super_admin"%'
+                 )
+               )
+             )`,
+          [requestOrgId]
+        );
+      }
+
       console.log(`[PLANT] Found ${adminsResult.rows.length} admin(s) to notify for tracker status request ${request.id}`);
 
-      // Create notifications for all admins/super admins
       const statusText = status_type === 'done' ? 'completed' : 'halfway done';
       const taskText = task_type === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash';
       const title = `Tracker Status Request - ${taskText}`;
       const messageText = `${user.full_name || user.username} has marked ${tracker_ids.length} tracker(s) as ${statusText} for ${taskText}. Trackers: ${tracker_ids.join(', ')}`;
 
-      // Create notifications for all admins/super admins
-      // idempotency_key will automatically prevent duplicates
+      // Create notifications for org admins only (idempotency_key will prevent duplicates)
       for (const admin of adminsResult.rows) {
         try {
           await createNotification(pool, {
@@ -538,10 +554,11 @@ module.exports = (pool) => {
   // Get pending tracker status requests (admin/superadmin only)
   router.get('/tracker-status-requests', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const userId = req.session.userId;
       
       // Check if user is admin or super admin
-      const userResult = await pool.query(
+      const userResult = await db.query(
         `SELECT role, roles FROM users WHERE id = $1`,
         [userId]
       );
@@ -560,7 +577,7 @@ module.exports = (pool) => {
 
       const { status = 'pending' } = req.query;
 
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT tsr.*, 
                 u.full_name as user_full_name, 
                 u.username as user_username,
@@ -584,6 +601,7 @@ module.exports = (pool) => {
   // Approve or reject tracker status request (admin/superadmin only)
   router.patch('/tracker-status-request/:id', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { id } = req.params;
       const { action, rejection_reason } = req.body; // action: 'approve' or 'reject'
       const reviewerId = req.session.userId;
@@ -605,7 +623,7 @@ module.exports = (pool) => {
       }
 
       // Check if user is admin or super admin and get organization_id
-      const userResult = await pool.query(
+      const userResult = await db.query(
         `SELECT role, roles, organization_id FROM users WHERE id = $1`,
         [reviewerId]
       );
@@ -628,7 +646,7 @@ module.exports = (pool) => {
       const organizationId = (!isSystemOwner && user.organization_id) ? user.organization_id : null;
 
       // Get the request
-      const requestResult = await pool.query(
+      const requestResult = await db.query(
         `SELECT * FROM tracker_status_requests WHERE id = $1`,
         [id]
       );
@@ -651,7 +669,7 @@ module.exports = (pool) => {
       const newStatus = action === 'approve' ? 'approved' : 'rejected';
 
       // Update request
-      await pool.query(
+      await db.query(
         `UPDATE tracker_status_requests 
          SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP, 
              rejection_reason = $3, updated_at = CURRENT_TIMESTAMP
@@ -699,7 +717,7 @@ module.exports = (pool) => {
           }
           structureQuery += ' ORDER BY version DESC LIMIT 1';
           
-          const structureResult = await pool.query(structureQuery, structureParams);
+          const structureResult = await db.query(structureQuery, structureParams);
 
           if (structureResult.rows.length === 0 || !structureResult.rows[0].structure_data) {
             console.error('[PLANT] No structure found in database for approval');
@@ -744,7 +762,7 @@ module.exports = (pool) => {
         console.log(`[PLANT] Saving structure with version ${newVersion} (previous: ${currentVersion}) for approval`);
 
         // Save to database
-        await pool.query(
+        await db.query(
           `INSERT INTO plant_map_structure (structure_data, version, organization_id)
            VALUES ($1, $2, $3)`,
           [JSON.stringify(structure), newVersion, organizationId]
@@ -768,15 +786,16 @@ module.exports = (pool) => {
         }
 
         // Ensure cycle exists (create Cycle 1 if task just started)
-        await ensureCycleExists(request.task_type);
+        const cycleOrgId = getOrganizationIdFromRequest(req) || organizationId;
+        await ensureCycleExists(request.task_type, cycleOrgId);
 
         // Check if cycle should be marked as complete after status update
         const progressData = calculateProgress(structure, request.task_type);
-        await checkAndMarkCycleComplete(request.task_type, progressData.progress);
+        await checkAndMarkCycleComplete(request.task_type, progressData.progress, cycleOrgId);
       }
 
       // Get requester info
-      const requesterResult = await pool.query(
+      const requesterResult = await db.query(
         'SELECT full_name, username FROM users WHERE id = $1',
         [request.user_id]
       );
@@ -784,7 +803,7 @@ module.exports = (pool) => {
 
       // Mark original notification as read for the reviewer (admin who approved/rejected)
       // This marks all tracker_status_request notifications for this request_id that belong to the reviewer
-      await pool.query(
+      await db.query(
         `UPDATE notifications 
          SET is_read = true, read_at = CURRENT_TIMESTAMP 
          WHERE type = 'tracker_status_request' 
@@ -861,15 +880,20 @@ module.exports = (pool) => {
   }
 
   // Helper function to ensure cycle exists (create Cycle 1 when task starts)
-  async function ensureCycleExists(taskType) {
-    // Check if there's any cycle for this task type
-    const existingCycleResult = await pool.query(`
+  async function ensureCycleExists(taskType, organizationId = null) {
+    // Check if there's any cycle for this task type and organization
+    const params = [taskType];
+    let orgFilter = organizationId
+      ? ` AND organization_id = $${params.push(organizationId)}`
+      : ' AND organization_id IS NULL';
+
+    const existingCycleResult = await db.query(`
       SELECT id, cycle_number, completed_at
       FROM tracker_cycles
-      WHERE task_type = $1
+      WHERE task_type = $1${orgFilter}
       ORDER BY cycle_number DESC
       LIMIT 1
-    `, [taskType]);
+    `, params);
 
     // If no cycles exist, create Cycle 1 (task has just started)
     if (existingCycleResult.rows.length === 0) {
@@ -877,13 +901,13 @@ module.exports = (pool) => {
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
 
-      const newCycleResult = await pool.query(`
-        INSERT INTO tracker_cycles (task_type, cycle_number, started_at, year, month)
-        VALUES ($1, 1, $2, $3, $4)
+      const newCycleResult = await db.query(`
+        INSERT INTO tracker_cycles (task_type, cycle_number, started_at, year, month, organization_id)
+        VALUES ($1, 1, $2, $3, $4, $5)
         RETURNING id, cycle_number, started_at, year, month
-      `, [taskType, now, year, month]);
+      `, [taskType, now, year, month, organizationId]);
 
-      console.log(`[PLANT] Cycle 1 created for ${taskType} - task has started`);
+      console.log(`[PLANT] Cycle 1 created for ${taskType} org=${organizationId} - task has started`);
       return newCycleResult.rows[0];
     }
 
@@ -898,17 +922,22 @@ module.exports = (pool) => {
   }
 
   // Helper function to check and mark cycle as complete
-  async function checkAndMarkCycleComplete(taskType, progress) {
+  async function checkAndMarkCycleComplete(taskType, progress, organizationId = null) {
     if (progress < 100) return;
 
-    // Get current incomplete cycle
-    const cycleResult = await pool.query(`
+    // Get current incomplete cycle for this organization
+    const params = [taskType];
+    let orgFilter = organizationId
+      ? ` AND organization_id = $${params.push(organizationId)}`
+      : ' AND organization_id IS NULL';
+
+    const cycleResult = await db.query(`
       SELECT id, cycle_number, completed_at
       FROM tracker_cycles
-      WHERE task_type = $1 AND completed_at IS NULL
+      WHERE task_type = $1 AND completed_at IS NULL${orgFilter}
       ORDER BY cycle_number DESC
       LIMIT 1
-    `, [taskType]);
+    `, params);
 
     if (cycleResult.rows.length > 0) {
       const cycle = cycleResult.rows[0];
@@ -918,7 +947,7 @@ module.exports = (pool) => {
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
 
-        await pool.query(`
+        await db.query(`
           UPDATE tracker_cycles
           SET completed_at = $1, year = $2, month = $3, updated_at = CURRENT_TIMESTAMP
           WHERE id = $4
@@ -932,16 +961,20 @@ module.exports = (pool) => {
   // Get current cycle information
   router.get('/cycles/:task_type', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_type } = req.params;
-      
+
       if (!['grass_cutting', 'panel_wash'].includes(task_type)) {
         return res.status(400).json({ error: 'Invalid task_type. Must be "grass_cutting" or "panel_wash"' });
       }
 
-      // Get user's organization_id for filtering
+      // Get organization_id for scoping cycles per organization
+      const cycleOrgId = getOrganizationIdFromRequest(req);
+
+      // Get user's organization_id for structure filtering (existing logic)
       let organizationId = null;
       if (req.session && req.session.userId) {
-        const userResult = await pool.query(
+        const userResult = await db.query(
           'SELECT organization_id, role, roles FROM users WHERE id = $1',
           [req.session.userId]
         );
@@ -954,7 +987,10 @@ module.exports = (pool) => {
           }
         }
       }
-      
+
+      // Use cycleOrgId (from tenant context / selected org) or fall back to user's org
+      const effectiveOrgId = cycleOrgId || organizationId;
+
       // Calculate current progress first to check if task has started
       let structureQuery = 'SELECT structure_data FROM plant_map_structure';
       const structureParams = [];
@@ -963,8 +999,8 @@ module.exports = (pool) => {
         structureParams.push(organizationId);
       }
       structureQuery += ' ORDER BY version DESC LIMIT 1';
-      
-      const structureResult = await pool.query(structureQuery, structureParams);
+
+      const structureResult = await db.query(structureQuery, structureParams);
 
       let progress = 0;
       let doneCount = 0;
@@ -983,20 +1019,25 @@ module.exports = (pool) => {
         totalCount = progressData.totalCount;
       }
 
-      // Get current incomplete cycle (if task has started)
-      const cycleResult = await pool.query(`
+      // Get current incomplete cycle for THIS organization
+      const cycleParams = [task_type];
+      let cycleOrgFilter = effectiveOrgId
+        ? ` AND organization_id = $${cycleParams.push(effectiveOrgId)}`
+        : ' AND organization_id IS NULL';
+
+      const cycleResult = await db.query(`
         SELECT id, cycle_number, started_at, completed_at, year, month
         FROM tracker_cycles
-        WHERE task_type = $1 AND completed_at IS NULL
+        WHERE task_type = $1 AND completed_at IS NULL${cycleOrgFilter}
         ORDER BY cycle_number DESC
         LIMIT 1
-      `, [task_type]);
+      `, cycleParams);
 
       // If no cycle exists, task hasn't started yet
       if (cycleResult.rows.length === 0) {
         // If progress > 0, task has started but cycle wasn't created (edge case - create it now)
         if (progress > 0) {
-          const newCycle = await ensureCycleExists(task_type);
+          const newCycle = await ensureCycleExists(task_type, effectiveOrgId);
           if (newCycle) {
             return res.json({
               cycle_number: newCycle.cycle_number,
@@ -1034,7 +1075,7 @@ module.exports = (pool) => {
 
       // Progress already calculated above, no need to recalculate
       // Check if cycle should be marked as complete
-      await checkAndMarkCycleComplete(task_type, progress);
+      await checkAndMarkCycleComplete(task_type, progress, effectiveOrgId);
 
       res.json({
         cycle_number: cycle.cycle_number,
@@ -1057,6 +1098,7 @@ module.exports = (pool) => {
   // Reset cycle (admin only)
   router.post('/cycles/:task_type/reset', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_type } = req.params;
       const userId = req.session.userId;
 
@@ -1065,7 +1107,7 @@ module.exports = (pool) => {
       }
 
       // Check if user is admin and get organization_id
-      const userResult = await pool.query(
+      const userResult = await db.query(
         `SELECT role, roles, organization_id FROM users WHERE id = $1`,
         [userId]
       );
@@ -1084,20 +1126,23 @@ module.exports = (pool) => {
       }
 
       // Get organization_id for plant_map_structure update
-      // For system_owner users, organization_id can be NULL
+      // For system_owner users, organization_id can be NULL for structure queries
       const isSystemOwner = userRoles.includes('system_owner') || user.role === 'system_owner' || userRoles.includes('super_admin') || user.role === 'super_admin';
       const organizationId = (!isSystemOwner && user.organization_id) ? user.organization_id : null;
+
+      // For cycle scoping, always resolve the actual organization (even for system_owner)
+      const cycleOrgId = getOrganizationIdFromRequest(req) || user.organization_id || null;
 
       // Load structure from FILE first (to ensure consistency with frontend)
       // This matches the GET /structure endpoint behavior
       const organizationSlug = await getOrganizationSlugFromRequest(req, pool);
       let structure = null;
       let currentVersion = 0;
-      
+
       if (organizationSlug) {
         const plantDir = getCompanySubDir(organizationSlug, 'plant');
         const mapFilePath = path.join(plantDir, 'map-structure.json');
-        
+
         if (fs.existsSync(mapFilePath)) {
           try {
             const fileContent = fs.readFileSync(mapFilePath, 'utf8');
@@ -1114,7 +1159,7 @@ module.exports = (pool) => {
           }
         }
       }
-      
+
       // Fallback to database if file doesn't exist
       if (!structure) {
         console.log('[PLANT] File not found, loading from database for cycle reset');
@@ -1125,8 +1170,8 @@ module.exports = (pool) => {
           structureParams.push(organizationId);
         }
         structureQuery += ' ORDER BY version DESC LIMIT 1';
-        
-        const structureResult = await pool.query(structureQuery, structureParams);
+
+        const structureResult = await db.query(structureQuery, structureParams);
 
         if (structureResult.rows.length === 0 || !structureResult.rows[0].structure_data) {
           return res.status(404).json({ error: 'Plant map structure not found' });
@@ -1138,19 +1183,24 @@ module.exports = (pool) => {
           structure = JSON.parse(structure);
         }
       }
-      
+
       if (!Array.isArray(structure)) {
         return res.status(500).json({ error: 'Invalid map structure format' });
       }
 
-      // Get current cycle (or last cycle if no active cycle exists)
-      const cycleResult = await pool.query(`
+      // Get current cycle for THIS organization
+      const cycleParams = [task_type];
+      let cycleOrgFilter = cycleOrgId
+        ? ` AND organization_id = $${cycleParams.push(cycleOrgId)}`
+        : ' AND organization_id IS NULL';
+
+      const cycleResult = await db.query(`
         SELECT id, cycle_number, completed_at
         FROM tracker_cycles
-        WHERE task_type = $1
+        WHERE task_type = $1${cycleOrgFilter}
         ORDER BY cycle_number DESC
         LIMIT 1
-      `, [task_type]);
+      `, cycleParams);
 
       let currentCycle = null;
       let newCycleNumber = 1;
@@ -1165,7 +1215,7 @@ module.exports = (pool) => {
           const now = new Date();
           const year = now.getFullYear();
           const month = now.getMonth() + 1;
-          await pool.query(`
+          await db.query(`
             UPDATE tracker_cycles
             SET completed_at = $1, year = $2, month = $3, updated_at = CURRENT_TIMESTAMP
             WHERE id = $4
@@ -1176,16 +1226,16 @@ module.exports = (pool) => {
       }
       // If no cycles exist at all, start with Cycle 1
 
-      // Create new cycle
+      // Create new cycle scoped to this organization
       const now = new Date();
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
-      
-      const newCycleResult = await pool.query(`
-        INSERT INTO tracker_cycles (task_type, cycle_number, started_at, year, month, reset_by, reset_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+
+      const newCycleResult = await db.query(`
+        INSERT INTO tracker_cycles (task_type, cycle_number, started_at, year, month, reset_by, reset_at, organization_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, cycle_number, started_at, year, month
-      `, [task_type, newCycleNumber, now, year, month, userId, now]);
+      `, [task_type, newCycleNumber, now, year, month, userId, now, cycleOrgId]);
 
       const newCycle = newCycleResult.rows[0];
 
@@ -1284,7 +1334,7 @@ module.exports = (pool) => {
       console.log(`[PLANT] Saving structure with version ${newVersion} (previous: ${currentVersion})`);
 
       // Save to database
-      await pool.query(`
+      await db.query(`
         INSERT INTO plant_map_structure (structure_data, version, organization_id)
         VALUES ($1, $2, $3)
       `, [JSON.stringify(structure), newVersion, organizationId]);
@@ -1358,9 +1408,107 @@ module.exports = (pool) => {
     }
   });
 
+  // Clear cycle to zero (system_owner only) - deletes all cycle records and resets trackers
+  router.post('/cycles/:task_type/clear', requireAuth, async (req, res) => {
+    try {
+      const db = getDb(req, pool);
+      const { task_type } = req.params;
+      const userId = req.session.userId;
+
+      if (!['grass_cutting', 'panel_wash'].includes(task_type)) {
+        return res.status(400).json({ error: 'Invalid task_type' });
+      }
+
+      // Only system_owner can clear to zero
+      const userResult = await db.query(
+        'SELECT role, roles, organization_id FROM users WHERE id = $1',
+        [userId]
+      );
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const user = userResult.rows[0];
+      const userRoles = user.roles ? (typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles) : [user.role];
+      const isSystemOwner = userRoles.includes('system_owner') || user.role === 'system_owner'
+        || userRoles.includes('super_admin') || user.role === 'super_admin';
+
+      if (!isSystemOwner) {
+        return res.status(403).json({ error: 'Only system owners can clear cycles to zero' });
+      }
+
+      // Resolve organization for scoping
+      const cycleOrgId = getOrganizationIdFromRequest(req) || user.organization_id || null;
+
+      // Delete cycle records for this task_type AND organization only
+      if (cycleOrgId) {
+        await db.query('DELETE FROM tracker_cycles WHERE task_type = $1 AND organization_id = $2', [task_type, cycleOrgId]);
+        try {
+          await db.query('DELETE FROM tracker_cycle_history WHERE task_type = $1 AND organization_id = $2', [task_type, cycleOrgId]);
+        } catch (historyErr) {
+          console.warn('[PLANT] tracker_cycle_history table may not exist:', historyErr.message);
+        }
+      } else {
+        await db.query('DELETE FROM tracker_cycles WHERE task_type = $1 AND organization_id IS NULL', [task_type]);
+        try {
+          await db.query('DELETE FROM tracker_cycle_history WHERE task_type = $1 AND organization_id IS NULL', [task_type]);
+        } catch (historyErr) {
+          console.warn('[PLANT] tracker_cycle_history table may not exist:', historyErr.message);
+        }
+      }
+
+      console.log(`[PLANT] Cycles cleared to zero for ${task_type} org=${cycleOrgId} by user ${userId}`);
+
+      // Also reset all tracker colors to white
+      const organizationSlug = await getOrganizationSlugFromRequest(req, pool);
+      const organizationId = cycleOrgId;
+
+      if (organizationSlug) {
+        const plantDir = getCompanySubDir(organizationSlug, 'plant');
+        const mapFilePath = path.join(plantDir, 'map-structure.json');
+
+        if (fs.existsSync(mapFilePath)) {
+          try {
+            const fileContent = fs.readFileSync(mapFilePath, 'utf8');
+            const mapData = JSON.parse(fileContent);
+
+            if (mapData && Array.isArray(mapData.structure)) {
+              mapData.structure.forEach(tracker => {
+                if (tracker.id && tracker.id.startsWith('M') && /^M\d{2}$/.test(tracker.id)) {
+                  tracker.grassCuttingColor = '#ffffff';
+                  tracker.panelWashColor = '#ffffff';
+                }
+              });
+
+              mapData.version = (mapData.version || 0) + 1;
+              mapData.updated_at = new Date().toISOString();
+              fs.writeFileSync(mapFilePath, JSON.stringify(mapData, null, 2), 'utf8');
+
+              // Also save to database
+              await db.query(
+                'INSERT INTO plant_map_structure (structure_data, version, organization_id) VALUES ($1, $2, $3)',
+                [JSON.stringify(mapData.structure), mapData.version, organizationId]
+              );
+
+              console.log(`[PLANT] Tracker colors reset to white for ${task_type}`);
+            }
+          } catch (fileError) {
+            console.error('[PLANT] Error resetting tracker colors:', fileError);
+          }
+        }
+      }
+
+      res.json({ success: true, message: `${task_type} cycles cleared to zero` });
+    } catch (error) {
+      console.error('[PLANT] Error clearing cycles:', error);
+      res.status(500).json({ error: 'Failed to clear cycles' });
+    }
+  });
+
   // Get cycle history
   router.get('/cycles/:task_type/history', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_type } = req.params;
       const { year, month } = req.query;
 
@@ -1368,8 +1516,11 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Invalid task_type. Must be "grass_cutting" or "panel_wash"' });
       }
 
+      // Scope history to the current organization
+      const cycleOrgId = getOrganizationIdFromRequest(req);
+
       let query = `
-        SELECT 
+        SELECT
           tc.id,
           tc.cycle_number,
           tc.started_at,
@@ -1387,6 +1538,12 @@ module.exports = (pool) => {
       `;
       const params = [task_type];
 
+      // Filter by organization
+      if (cycleOrgId) {
+        query += ` AND tc.organization_id = $${params.length + 1}`;
+        params.push(cycleOrgId);
+      }
+
       if (year) {
         query += ` AND tc.year = $${params.length + 1}`;
         params.push(parseInt(year, 10));
@@ -1399,7 +1556,7 @@ module.exports = (pool) => {
 
       query += ` ORDER BY tc.year DESC, tc.month DESC, tc.cycle_number DESC`;
 
-      const result = await pool.query(query, params);
+      const result = await db.query(query, params);
 
       const cycles = result.rows.map(row => ({
         id: row.id,
@@ -1441,6 +1598,7 @@ module.exports = (pool) => {
   // Get cycle statistics
   router.get('/cycles/:task_type/stats', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { task_type } = req.params;
       const { year } = req.query;
 
@@ -1450,9 +1608,18 @@ module.exports = (pool) => {
 
       const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
 
-      // Get cycles for the year
-      const cyclesResult = await pool.query(`
-        SELECT 
+      // Scope stats to the current organization
+      const cycleOrgId = getOrganizationIdFromRequest(req);
+
+      // Get cycles for the year, scoped by organization
+      const statsParams = [task_type, targetYear];
+      let orgStatsFilter = '';
+      if (cycleOrgId) {
+        orgStatsFilter = ` AND organization_id = $${statsParams.push(cycleOrgId)}`;
+      }
+
+      const cyclesResult = await db.query(`
+        SELECT
           cycle_number,
           started_at,
           completed_at,
@@ -1460,9 +1627,9 @@ module.exports = (pool) => {
           month,
           EXTRACT(EPOCH FROM (completed_at - started_at)) / 86400 as duration_days
         FROM tracker_cycles
-        WHERE task_type = $1 AND year = $2 AND completed_at IS NOT NULL
+        WHERE task_type = $1 AND year = $2 AND completed_at IS NOT NULL${orgStatsFilter}
         ORDER BY month, cycle_number
-      `, [task_type, targetYear]);
+      `, statsParams);
 
       const cycles = cyclesResult.rows;
       const totalCycles = cycles.length;

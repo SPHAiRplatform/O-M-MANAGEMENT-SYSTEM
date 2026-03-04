@@ -1,0 +1,50 @@
+/* Tasks – compact filters on mobile */
+@media (max-width: 768px) {
+  .tasks-filters {
+    margin-bottom: 12px !important;
+  }
+
+  .tasks-filters h3 {
+    font-size: 1rem !important;
+    margin-bottom: 8px !important;
+  }
+
+  .tasks-filters .tasks-search-input {
+    padding: 8px 10px !important;
+    font-size: 14px !important;
+    min-height: 36px !important;
+  }
+
+  .tasks-filters .filters-container {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .tasks-filters .filters-container .form-group {
+    flex: none !important;
+    min-width: unset !important;
+    margin-bottom: 0 !important;
+  }
+
+  .tasks-filters .filters-container .form-group label {
+    font-size: 12px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .tasks-filters .filters-container .form-group input,
+  .tasks-filters .filters-container .form-group select {
+    padding: 8px 10px !important;
+    font-size: 14px !important;
+    min-height: 36px !important;
+  }
+
+  .tasks-filters .btn.btn-sm {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    min-height: 36px !important;
+    width: auto !important;
+    margin-bottom: 0 !important;
+  }
+}

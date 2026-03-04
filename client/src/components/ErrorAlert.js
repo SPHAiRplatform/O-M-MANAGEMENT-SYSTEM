@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import './ErrorAlert.css';
 
 /**
@@ -103,24 +103,65 @@ export const ErrorAlert = ({
 };
 
 /**
- * SuccessAlert - Convenience wrapper for success messages
+ * Toast - Non-blocking notification that auto-dismisses
+ * Used by SuccessAlert, InfoAlert, and WarningAlert
+ */
+const TOAST_DURATION = 4000;
+
+const Toast = ({ message, onClose, title, type = 'success' }) => {
+  const [dismissing, setDismissing] = useState(false);
+
+  const dismiss = useCallback(() => {
+    setDismissing(true);
+    setTimeout(() => onClose(), 300); // match CSS animation duration
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(dismiss, TOAST_DURATION);
+    return () => clearTimeout(timer);
+  }, [message, dismiss]);
+
+  if (!message) return null;
+
+  const text = typeof message === 'string' ? message : message.message;
+
+  const icons = { success: '✓', info: 'ℹ', warning: '⚠' };
+
+  return (
+    <div className={`toast-container ${dismissing ? 'toast-dismiss' : ''}`} onClick={dismiss} role="status">
+      <div className={`toast-bar toast-bar-${type}`}>
+        <span className={`toast-icon toast-icon-${type}`}>{icons[type] || '✓'}</span>
+        <div className="toast-content">
+          {title && <span className="toast-title">{title}</span>}
+          <span className="toast-message">{text}</span>
+        </div>
+        <button className="toast-close" onClick={(e) => { e.stopPropagation(); dismiss(); }} aria-label="Dismiss">×</button>
+        <div className={`toast-progress toast-progress-${type}`} style={{ animationDuration: `${TOAST_DURATION}ms` }} />
+      </div>
+    </div>
+  );
+};
+
+/**
+ * SuccessAlert - Toast notification for success messages (auto-dismisses)
  */
 export const SuccessAlert = ({ message, onClose, title = 'Success' }) => (
-  <ErrorAlert error={message} onClose={onClose} title={title} type="success" />
+  <Toast message={message} onClose={onClose} title={title} type="success" />
 );
 
 /**
- * WarningAlert - Convenience wrapper for warning messages
+ * WarningAlert - Toast notification for warning messages (auto-dismisses)
  */
 export const WarningAlert = ({ message, onClose, title = 'Warning' }) => (
-  <ErrorAlert error={message} onClose={onClose} title={title} type="warning" />
+  <Toast message={message} onClose={onClose} title={title} type="warning" />
 );
 
 /**
- * InfoAlert - Convenience wrapper for info messages
+ * InfoAlert - Toast notification for info messages (auto-dismisses)
  */
 export const InfoAlert = ({ message, onClose, title = 'Information' }) => (
-  <ErrorAlert error={message} onClose={onClose} title={title} type="info" />
+  <Toast message={message} onClose={onClose} title={title} type="info" />
 );
 
 /**

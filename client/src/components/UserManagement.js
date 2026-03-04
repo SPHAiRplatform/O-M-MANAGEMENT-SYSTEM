@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { getApiBaseUrl } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
+import { ConfirmDialog } from './ConfirmDialog';
 import './UserManagement.css';
 
 function UserManagement() {
@@ -33,7 +34,10 @@ function UserManagement() {
   const editRolesFormRef = useRef(null); // Ref for the edit roles form section
   const [showRoleDescriptions, setShowRoleDescriptions] = useState(false);
   const [orgLimits, setOrgLimits] = useState({ user_count: 0, user_limit: null });
-  const usersPerPage = 4;
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const usersPerPage = 10;
 
   useEffect(() => {
     if (currentUser && isAdmin()) {
@@ -63,7 +67,6 @@ function UserManagement() {
       console.error('Error loading roles:', error);
       // Fallback to default roles
       setAvailableRoles([
-        { role_code: 'system_owner', role_name: 'System Owner' },
         { role_code: 'operations_admin', role_name: 'Operations Administrator' },
         { role_code: 'supervisor', role_name: 'Supervisor' },
         { role_code: 'technician', role_name: 'Technician' },
@@ -128,6 +131,7 @@ function UserManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSaving(true);
 
     try {
       if (editingUser) {
@@ -145,7 +149,7 @@ function UserManagement() {
         }
         await updateUser(editingUser.id, updateData);
       } else {
-        // Create user - password is optional (will use default "witkop123" if not provided)
+        // Create user - password is optional (will use default "username000001" if not provided)
         const createData = { ...formData };
         // Remove password from data if empty (backend will use default)
         if (!createData.password || createData.password.trim() === '') {
@@ -177,6 +181,8 @@ function UserManagement() {
       loadOrgLimits();
     } catch (error) {
       setError(getErrorMessage(error, 'Failed to save user'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -265,42 +271,50 @@ function UserManagement() {
 
   const handleDeactivate = async (id, username, isActive) => {
     const action = isActive ? 'deactivate' : 'reactivate';
-    const message = isActive 
+    const message = isActive
       ? `Are you sure you want to deactivate ${username}? They will not be able to access the app.`
       : `Are you sure you want to reactivate ${username}? They will be able to access the app again.`;
-    
-    if (!window.confirm(message)) {
-      return;
-    }
 
-    try {
-      if (isActive) {
-        await deactivateUser(id);
-      } else {
-        // Reactivate using update endpoint
-        await updateUser(id, { is_active: true });
+    setConfirmDialog({
+      title: isActive ? 'Deactivate User' : 'Reactivate User',
+      message,
+      confirmLabel: isActive ? 'Deactivate' : 'Reactivate',
+      variant: isActive ? 'warning' : 'info',
+      onConfirm: async () => {
+        try {
+          if (isActive) {
+            await deactivateUser(id);
+          } else {
+            // Reactivate using update endpoint
+            await updateUser(id, { is_active: true });
+          }
+          loadUsers();
+          setError(''); // Clear any previous errors
+        } catch (error) {
+          const { getErrorMessage } = require('../utils/errorHandler');
+          setError(getErrorMessage(error, `Failed to ${action} user`));
+        }
       }
-      loadUsers();
-      setError(''); // Clear any previous errors
-    } catch (error) {
-      const { getErrorMessage } = require('../utils/errorHandler');
-      setError(getErrorMessage(error, `Failed to ${action} user`));
-    }
+    });
   };
 
   const handleDelete = async (id, username) => {
-    if (!window.confirm(`Are you sure you want to permanently delete user "${username}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      await deleteUser(id);
-      loadUsers();
-      setError(''); // Clear any previous errors
-    } catch (error) {
-      const { getErrorMessage } = require('../utils/errorHandler');
-      setError(getErrorMessage(error, 'Failed to delete user'));
-    }
+    setConfirmDialog({
+      title: 'Delete User',
+      message: `Are you sure you want to permanently delete user "${username}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteUser(id);
+          loadUsers();
+          setError(''); // Clear any previous errors
+        } catch (error) {
+          const { getErrorMessage } = require('../utils/errorHandler');
+          setError(getErrorMessage(error, 'Failed to delete user'));
+        }
+      }
+    });
   };
 
 
@@ -474,16 +488,10 @@ function UserManagement() {
               <div className="form-group">
                 <label>Roles * {(hasRole('system_owner') || isSuperAdmin()) && <small>(Multiple roles allowed)</small>}</label>
                 {(hasRole('system_owner') || isSuperAdmin()) ? (
-                  // Multi-select checkboxes for system owner
+                  // Multi-select checkboxes for admins (platform or org), but never show system_owner/super_admin here
                   <div className="roles-checkboxes">
                     {availableRoles
-                      .filter(role => {
-                        // Only system_owner can see and assign system_owner role
-                        if (role.role_code === 'system_owner') {
-                          return hasRole('system_owner') || isSuperAdmin();
-                        }
-                        return true;
-                      })
+                      .filter(role => role.role_code !== 'system_owner' && role.role_code !== 'super_admin')
                       .map(role => (
                       <label key={role.role_code} className="role-checkbox">
                         <input
@@ -554,7 +562,7 @@ function UserManagement() {
                 />
                 {!editingUser && (
                   <small className="form-text text-muted">
-                    If left blank, the default password "witkop123" will be used. User will be prompted to change it on first login.
+                    If left blank, the default password "000001" will be used. User will be prompted to change it on first login.
                   </small>
                 )}
               </div>
@@ -605,10 +613,10 @@ function UserManagement() {
             )}
 
             <div className="form-actions">
-              <button type="submit" className="btn btn-primary">
-                {editingUser ? 'Save' : 'Create'}
+              <button type="submit" className={`btn btn-primary ${saving ? 'btn-loading' : ''}`} disabled={saving}>
+                <span>{editingUser ? 'Save' : 'Create'}</span>
               </button>
-              <button type="button" className="btn btn-secondary" onClick={handleCancel}>
+              <button type="button" className="btn btn-secondary" onClick={handleCancel} disabled={saving}>
                 Cancel
               </button>
             </div>
@@ -712,14 +720,33 @@ function UserManagement() {
             </div>
           )}
           
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              type="text"
+              placeholder="Search by name, username, email, or role..."
+              value={userSearchQuery}
+              onChange={(e) => { setUserSearchQuery(e.target.value); setCurrentPage(1); }}
+              style={{ width: '100%', padding: '10px 12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '6px', boxSizing: 'border-box' }}
+            />
+          </div>
           <div className="table-responsive">
             {(() => {
-              const totalPages = Math.ceil(users.length / usersPerPage);
+              const filteredUsers = userSearchQuery.trim()
+                ? users.filter(u => {
+                    const q = userSearchQuery.toLowerCase();
+                    return (u.username || '').toLowerCase().includes(q) ||
+                           (u.full_name || '').toLowerCase().includes(q) ||
+                           (u.email || '').toLowerCase().includes(q) ||
+                           (u.roles || []).some(r => formatRoleName(r).toLowerCase().includes(q)) ||
+                           (u.role || '').toLowerCase().includes(q);
+                  })
+                : users;
+              const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
               const startIndex = (currentPage - 1) * usersPerPage;
               const endIndex = startIndex + usersPerPage;
-              const currentUsers = users.slice(startIndex, endIndex);
-              const startUser = users.length > 0 ? startIndex + 1 : 0;
-              const endUser = Math.min(endIndex, users.length);
+              const currentUsers = filteredUsers.slice(startIndex, endIndex);
+              const startUser = filteredUsers.length > 0 ? startIndex + 1 : 0;
+              const endUser = Math.min(endIndex, filteredUsers.length);
 
               return (
                 <>
@@ -895,7 +922,7 @@ function UserManagement() {
                     borderTop: '1px solid #eee'
                   }}>
                     <div style={{ fontSize: '12px', color: '#666' }}>
-                      Showing {startUser}-{endUser} of {users.length} user{users.length !== 1 ? 's' : ''}
+                      Showing {startUser}-{endUser} of {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}
                     </div>
                     {totalPages > 1 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -939,6 +966,8 @@ function UserManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
     </div>
   );
 }

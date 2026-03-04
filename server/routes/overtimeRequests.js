@@ -6,6 +6,7 @@
 const express = require('express');
 const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 const { createNotification } = require('../utils/notifications');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -13,6 +14,7 @@ module.exports = (pool) => {
   // Get all overtime requests (super admin only)
   router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { status } = req.query;
       
       let query = `
@@ -49,7 +51,7 @@ module.exports = (pool) => {
       
       query += ' ORDER BY or.created_at DESC';
       
-      const result = await pool.query(query, params);
+      const result = await db.query(query, params);
       res.json(result.rows);
     } catch (error) {
       console.error('Error fetching overtime requests:', error);
@@ -60,7 +62,8 @@ module.exports = (pool) => {
   // Get overtime request by ID
   router.get('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT 
           or.*,
           t.task_code,

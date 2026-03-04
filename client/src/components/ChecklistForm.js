@@ -34,22 +34,72 @@ function ChecklistForm() {
   const autoSaveTimeoutRef = useRef(null);
   const lastSavedRef = useRef(null);
   const sparesSearchDebounceRef = useRef(null);
+  // Refs to track latest state for event listeners (avoids stale closures)
+  const formDataRef = useRef(formData);
+  const metadataRef = useRef(metadata);
+  const itemImagesRef = useRef(itemImages);
+  const sparesUsedRef = useRef(sparesUsed);
+  const hoursWorkedRef = useRef(hoursWorked);
+  const taskRef = useRef(task);
   // Unplanned CM time fields
   const [cmOccurredAt, setCmOccurredAt] = useState('');
   const [cmStartedAt, setCmStartedAt] = useState('');
   const [cmCompletedAt, setCmCompletedAt] = useState('');
+
+  // Keep refs in sync with state
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+  useEffect(() => { metadataRef.current = metadata; }, [metadata]);
+  useEffect(() => { itemImagesRef.current = itemImages; }, [itemImages]);
+  useEffect(() => { sparesUsedRef.current = sparesUsed; }, [sparesUsed]);
+  useEffect(() => { hoursWorkedRef.current = hoursWorked; }, [hoursWorked]);
+  useEffect(() => { taskRef.current = task; }, [task]);
+
+  // SessionStorage key for this task's form state (sync backup for mobile camera)
+  const sessionKey = `checklist_backup_${id}`;
+
+  // Synchronously save form state to sessionStorage (instant, no network)
+  const saveToSessionStorage = useCallback(() => {
+    try {
+      const backup = {
+        formData: formDataRef.current,
+        metadata: metadataRef.current,
+        // Exclude file objects from sessionStorage (not serializable)
+        itemImages: Object.fromEntries(
+          Object.entries(itemImagesRef.current).map(([k, v]) => [k, {
+            comment: v?.comment,
+            preview: v?.uploaded ? undefined : v?.preview,
+            uploaded: v?.uploaded,
+            uploadedAt: v?.uploadedAt
+          }])
+        ),
+        sparesUsed: sparesUsedRef.current,
+        hoursWorked: hoursWorkedRef.current,
+        savedAt: Date.now()
+      };
+      sessionStorage.setItem(sessionKey, JSON.stringify(backup));
+    } catch (e) {
+      // sessionStorage may be full or unavailable; ignore
+    }
+  }, [sessionKey]);
 
   useEffect(() => {
     loadTaskAndDraft();
     loadInventoryOptions();
 
     // Auto-save on unmount + on mobile pagehide
+    // Use refs to always access latest state (avoids stale closure bug)
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        handleAutoSave();
+        // Sync backup first (instant, survives page kill)
+        saveToSessionStorage();
+        // Then async backup to server
+        handleAutoSaveFromRefs();
       }
     };
-    const onPageHide = () => handleAutoSave();
+    const onPageHide = () => {
+      saveToSessionStorage();
+      handleAutoSaveFromRefs();
+    };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', onPageHide);
@@ -120,6 +170,34 @@ function ChecklistForm() {
     }
   }, [formData, metadata, itemImages, sparesUsed, task, id]);
 
+  // Ref-based auto-save for event listeners (avoids stale closure problem)
+  const handleAutoSaveFromRefs = useCallback(async () => {
+    const t = taskRef.current;
+    if (!t || !t.checklist_template_id) return;
+
+    const fd = formDataRef.current;
+    const md = metadataRef.current;
+    const imgs = itemImagesRef.current;
+    const spares = sparesUsedRef.current;
+    const hours = hoursWorkedRef.current;
+
+    try {
+      await saveDraftResponse({
+        task_id: id,
+        checklist_template_id: t.checklist_template_id || t.id,
+        response_data: fd,
+        maintenance_team: md.maintenance_team,
+        inspected_by: md.inspected_by,
+        approved_by: md.approved_by,
+        images: imgs,
+        spares_used: spares,
+        hours_worked: hours
+      });
+    } catch (error) {
+      console.error('Auto-save (ref) error:', error);
+    }
+  }, [id]);
+
   // Debounced auto-save
   useEffect(() => {
     if (!task) return;
@@ -139,7 +217,7 @@ function ChecklistForm() {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [formData, metadata, handleAutoSave, task]);
+  }, [formData, metadata, itemImages, handleAutoSave, task]);
 
   const mergeDeep = (base, override) => {
     if (!override) return base;
@@ -189,35 +267,79 @@ function ChecklistForm() {
           });
         });
 
-        // Load draft AFTER we have initial structure, and merge it on top
+        // Check sessionStorage backup first (survives mobile camera page kills)
+        let sessionBackup = null;
         try {
-          const draft = await getDraftResponse(id);
-          const draftResponseData = draft?.response_data || {};
+          const raw = sessionStorage.getItem(`checklist_backup_${id}`);
+          if (raw) {
+            sessionBackup = JSON.parse(raw);
+            // Only use if less than 30 minutes old
+            if (sessionBackup.savedAt && (Date.now() - sessionBackup.savedAt) > 30 * 60 * 1000) {
+              sessionBackup = null;
+            }
+          }
+        } catch (e) { /* ignore parse errors */ }
+
+        // Load server draft, merge with initial structure
+        let draft = null;
+        try {
+          draft = await getDraftResponse(id);
+        } catch (e) {
+          console.log('No server draft found');
+        }
+
+        // Choose the most recent data source: sessionStorage backup vs server draft
+        // sessionStorage is more recent if it was saved after returning from camera
+        const useSessionBackup = sessionBackup &&
+          sessionBackup.formData &&
+          Object.keys(sessionBackup.formData).length > 0 &&
+          (!draft || (sessionBackup.savedAt && sessionBackup.savedAt > Date.now() - 60000));
+
+        if (useSessionBackup && sessionBackup) {
+          console.log('Restoring from sessionStorage backup (camera recovery)');
+          setFormData(mergeDeep(initialData, sessionBackup.formData));
+          setMetadata({
+            maintenance_team: sessionBackup.metadata?.maintenance_team || '',
+            inspected_by: sessionBackup.metadata?.inspected_by || '',
+            approved_by: sessionBackup.metadata?.approved_by || ''
+          });
+          if (sessionBackup.itemImages && typeof sessionBackup.itemImages === 'object') {
+            setItemImages(sessionBackup.itemImages);
+          }
+          if (Array.isArray(sessionBackup.sparesUsed)) {
+            setSparesUsed(sessionBackup.sparesUsed);
+          }
+          if (sessionBackup.hoursWorked !== undefined && sessionBackup.hoursWorked !== '') {
+            setHoursWorked(sessionBackup.hoursWorked.toString());
+          }
+          // Clear the backup now that it's been restored
+          sessionStorage.removeItem(`checklist_backup_${id}`);
+        } else if (draft) {
+          console.log('Draft loaded and merged from server');
+          const draftResponseData = draft.response_data || {};
           setFormData(mergeDeep(initialData, draftResponseData));
           setMetadata({
-            maintenance_team: draft?.maintenance_team || '',
-            inspected_by: draft?.inspected_by || '',
-            approved_by: draft?.approved_by || ''
+            maintenance_team: draft.maintenance_team || '',
+            inspected_by: draft.inspected_by || '',
+            approved_by: draft.approved_by || ''
           });
-          // Restore uploaded image references (if any) without requiring re-select
-          if (draft?.images && typeof draft.images === 'object') {
+          if (draft.images && typeof draft.images === 'object') {
             setItemImages(draft.images);
           }
-          if (Array.isArray(draft?.spares_used)) {
+          if (Array.isArray(draft.spares_used)) {
             setSparesUsed(draft.spares_used);
           }
-          if (Array.isArray(draft?.spares_requested)) {
-          }
-          if (draft?.hours_worked !== undefined) {
+          if (draft.hours_worked !== undefined) {
             setHoursWorked(draft.hours_worked.toString());
           }
           lastSavedRef.current = JSON.stringify({ formData: mergeDeep(initialData, draftResponseData), metadata: {
-            maintenance_team: draft?.maintenance_team || '',
-            inspected_by: draft?.inspected_by || '',
-            approved_by: draft?.approved_by || ''
+            maintenance_team: draft.maintenance_team || '',
+            inspected_by: draft.inspected_by || '',
+            approved_by: draft.approved_by || ''
           }});
-          console.log('Draft loaded and merged successfully');
-        } catch (e) {
+          // Clear any stale sessionStorage backup
+          sessionStorage.removeItem(`checklist_backup_${id}`);
+        } else {
           setFormData(initialData);
           console.log('No draft found, starting fresh');
         }
@@ -591,7 +713,9 @@ function ChecklistForm() {
                   accept="image/*"
                   capture="environment"
                   onClick={() => {
-                    // Save draft before opening camera/gallery (mobile can unload the page)
+                    // SYNC save to sessionStorage before camera opens (instant, survives page kill)
+                    saveToSessionStorage();
+                    // Also fire async server save (may not complete before camera)
                     handleAutoSave();
                   }}
                   onChange={(e) => {
@@ -614,20 +738,25 @@ function ChecklistForm() {
                       (async () => {
                         const uploadResult = await handleImageUpload(sectionId, item.id, file, itemImages[key]?.comment || '');
                         if (uploadResult) {
-                          setItemImages(prev => ({
-                            ...prev,
-                            [key]: {
-                              ...prev[key],
-                              uploaded: {
-                                id: uploadResult.id,
-                                image_path: uploadResult.image_path,
-                                image_filename: uploadResult.image_filename
-                              },
-                              uploadedAt: new Date().toISOString()
-                            }
-                          }));
-                          // Save draft after upload so it's recoverable on mobile
-                          handleAutoSave();
+                          setItemImages(prev => {
+                            const updated = {
+                              ...prev,
+                              [key]: {
+                                ...prev[key],
+                                uploaded: {
+                                  id: uploadResult.id,
+                                  image_path: uploadResult.image_path,
+                                  image_filename: uploadResult.image_filename
+                                },
+                                uploadedAt: new Date().toISOString()
+                              }
+                            };
+                            // Save draft with the ACTUAL updated images (not stale closure)
+                            itemImagesRef.current = updated;
+                            // Sync backup immediately with correct data
+                            setTimeout(() => saveToSessionStorage(), 0);
+                            return updated;
+                          });
                         }
                       })();
                     }

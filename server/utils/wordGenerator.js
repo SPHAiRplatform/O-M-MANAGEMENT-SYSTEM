@@ -71,6 +71,8 @@ function generateWordDocument(templateData, templateCode, assetType = 'weather_s
       started_at: templateData.task?.start_hour || '',   // time task started
       finished_at: templateData.task?.finished_hour || '', // time task ended
       last_revision_date: templateData.template?.last_revision_date || '',
+      checklist_made_by: templateData.template?.checklist_made_by || '',
+      last_revision_approved_by: templateData.template?.last_revision_approved_by || '',
       maintenance_team: templateData.inspection?.maintenance_team || '',
       inspected_by: templateData.inspection?.inspected_by || '',
       approved_by: templateData.inspection?.approved_by || '',

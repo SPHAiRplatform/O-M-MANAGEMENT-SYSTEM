@@ -334,9 +334,19 @@ async function initializeDefaultConfigurations(db, organizationId) {
 
   // Enable default features
   const defaultFeatures = [
-    'tasks', 'inventory', 'calendar', 'plant', 'reports',
-    'cm_letters', 'checklist_templates', 'notifications',
-    'offline_sync', 'multi_user', 'audit_trail'
+    'dashboard',
+    'tasks',
+    'inventory',
+    'calendar',
+    'plant',
+    'reports',
+    'cm_letters',
+    'checklist_templates',
+    'notifications',
+    'offline_sync',
+    'multi_user',
+    'audit_trail',
+    'scada'
   ];
 
   for (const featureCode of defaultFeatures) {

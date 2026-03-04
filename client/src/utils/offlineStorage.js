@@ -3,7 +3,7 @@
  * Handles IndexedDB operations for offline data storage
  */
 
-const DB_NAME = 'SPHAiRPlatform_OfflineDB';
+const DB_NAME = 'SPHAiRDigital_OfflineDB';
 const DB_VERSION = 1;
 const STORES = {
   SYNC_QUEUE: 'syncQueue',

@@ -220,18 +220,18 @@
 }
 
 .view-button {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--md-info);
   text-decoration: none;
-  padding: 6px 16px;
+  padding: 5px 14px;
   border-radius: 4px;
   border: 1px solid var(--md-info);
   background: transparent;
   transition: all 0.2s ease;
   cursor: pointer;
   display: inline-block;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: nowrap;
 }
 
@@ -408,6 +408,15 @@
   min-height: 350px;
 }
 
+.today-datetime-inline {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-text-light, #64748b);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
 .daily-activities-list {
   flex: 1;
   overflow-y: auto;
@@ -472,7 +481,7 @@
   .dashboard-row {
     grid-template-columns: 1fr;
   }
-  
+
   .spares-chart-container {
     min-height: auto;
     padding: 16px;
@@ -496,5 +505,25 @@
 
   .chart-percentage {
     font-size: 28px;
+  }
+
+  /* PM stats: horizontal row on mobile */
+  .pm-stats-breakdown {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .pm-stat-item {
+    flex: 1;
+    padding: 6px 8px;
+    text-align: center;
+  }
+
+  .pm-stat-value.compact {
+    font-size: 18px;
+  }
+
+  .pm-stat-label {
+    font-size: 8px;
   }
 }

@@ -23,6 +23,7 @@ const {
   ensureCompanyDirs,
   getOrganizationSlugById
 } = require('../utils/organizationStorage');
+const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -44,7 +45,7 @@ module.exports = (pool) => {
           id, name, slug, is_active, created_at, updated_at,
           (SELECT COUNT(*) FROM users WHERE organization_id = organizations.id) as user_count,
           (SELECT COUNT(*) FROM assets WHERE organization_id = organizations.id) as asset_count,
-          (SELECT COUNT(*) FROM tasks WHERE organization_id = organizations.id) as task_count,
+          (SELECT COUNT(*) FROM tasks WHERE organization_id = organizations.id AND task_type = 'PM') as task_count,
           (SELECT setting_value::text FROM organization_settings WHERE organization_id = organizations.id AND setting_key = 'user_limit' LIMIT 1) as user_limit,
           (SELECT setting_value::text FROM organization_settings WHERE organization_id = organizations.id AND setting_key = 'subscription_plan' LIMIT 1) as subscription_plan
         FROM organizations
@@ -304,7 +305,7 @@ module.exports = (pool) => {
           const username = firstUser.username.trim();
           const email = firstUser.email.trim();
           const fullName = firstUser.full_name.trim();
-          const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'witkop123';
+          const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
           const password = (firstUser.password && firstUser.password.trim()) ? firstUser.password.trim() : DEFAULT_PASSWORD;
           const passwordHash = await bcrypt.hash(password, 10);
           const userId = uuidv4();
@@ -827,6 +828,78 @@ module.exports = (pool) => {
     }
   });
 
+  // Delete organization logo
+  router.delete('/:id/logo', requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.role === 'system_owner';
+
+      if (!isSystemOwner) {
+        return res.status(403).json({ error: 'Only system owners can delete logos' });
+      }
+
+      const db = getDb(req, pool);
+
+      // Get organization slug
+      const orgResult = await db.query('SELECT slug, name FROM organizations WHERE id = $1', [id]);
+      if (orgResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+
+      const organizationSlug = orgResult.rows[0].slug;
+      const organizationName = orgResult.rows[0].name;
+
+      console.log(`[Logo Delete] Starting logo deletion for: ${organizationName} (${id})`);
+
+      let fileDeleted = false;
+      try {
+        // Delete logo file from disk
+        const logosDir = getStoragePath(organizationSlug, 'logos');
+        const logoPath = path.join(logosDir, 'logo.png');
+
+        console.log(`[Logo Delete] Logo path: ${logoPath}`);
+
+        if (fs.existsSync(logoPath)) {
+          fs.unlinkSync(logoPath);
+          fileDeleted = true;
+          console.log(`[Logo Delete] Successfully deleted logo file at: ${logoPath}`);
+        } else {
+          console.log(`[Logo Delete] Logo file does not exist at: ${logoPath}`);
+        }
+      } catch (fileError) {
+        console.error(`[Logo Delete] Error deleting logo file for ${organizationName}:`, fileError);
+        // Continue - we'll still clear the database entry
+      }
+
+      // Clear logo_url from database
+      const brandingResult = await db.query(`
+        INSERT INTO organization_branding (organization_id, logo_url, updated_at)
+        VALUES ($1, NULL, CURRENT_TIMESTAMP)
+        ON CONFLICT (organization_id)
+        DO UPDATE SET logo_url = NULL, updated_at = CURRENT_TIMESTAMP
+        RETURNING logo_url
+      `, [id]);
+
+      console.log(`[Logo Delete] Database updated for ${organizationName}. Logo URL is now: ${brandingResult.rows[0]?.logo_url || 'NULL'}`);
+
+      res.json({
+        success: true,
+        message: 'Logo deleted successfully',
+        file_deleted: fileDeleted,
+        database_updated: true
+      });
+
+      console.log(`[Logo Delete] Successfully completed logo deletion for: ${organizationName}`);
+    } catch (error) {
+      console.error('[Logo Delete] Error deleting logo:', error);
+      res.status(500).json({
+        error: 'Failed to delete logo',
+        details: error.message
+      });
+    }
+  });
+
   // Update organization branding
   router.put('/:id/branding', requireAuth, async (req, res) => {
     try {
@@ -899,12 +972,10 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Cannot enter inactive organization' });
       }
       
-      // Set selected organization in session
       req.session.selectedOrganizationId = id;
       req.session.selectedOrganizationName = org.name;
       req.session.selectedOrganizationSlug = org.slug;
-      
-      // Save session
+      logAudit(pool, req, { action: AUDIT_ACTIONS.ORG_ENTERED, entityType: AUDIT_ENTITY_TYPES.ORGANIZATION, entityId: id, details: { organization_name: org.name } }).catch(() => {});
       req.session.save((err) => {
         if (err) {
           console.error('Error saving session:', err);
@@ -936,13 +1007,12 @@ module.exports = (pool) => {
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can exit companies' });
       }
-      
-      // Clear selected organization from session
+      const exitedOrgId = req.session.selectedOrganizationId;
+      const exitedOrgName = req.session.selectedOrganizationName;
+      logAudit(pool, req, { action: AUDIT_ACTIONS.ORG_EXITED, entityType: AUDIT_ENTITY_TYPES.ORGANIZATION, entityId: exitedOrgId || undefined, details: { organization_name: exitedOrgName } }).catch(() => {});
       req.session.selectedOrganizationId = null;
       req.session.selectedOrganizationName = null;
       req.session.selectedOrganizationSlug = null;
-      
-      // Save session
       req.session.save((err) => {
         if (err) {
           console.error('Error saving session:', err);
@@ -1028,7 +1098,7 @@ module.exports = (pool) => {
 
       try {
         const tasksResult = await db.query(
-          'SELECT COUNT(*) as count FROM tasks WHERE organization_id = $1',
+          'SELECT COUNT(*) as count FROM tasks WHERE organization_id = $1 AND task_type = \'PM\'',
           [id]
         );
         dataCounts.tasks = parseInt(tasksResult.rows[0]?.count || 0);

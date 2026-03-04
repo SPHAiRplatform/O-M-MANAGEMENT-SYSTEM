@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getTask, startTask, pauseTask, resumeTask, completeTask, downloadTaskReport, getEarlyCompletionRequests, createEarlyCompletionRequest } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { ErrorAlert, SuccessAlert, InfoAlert } from './ErrorAlert';
+import { ConfirmDialog } from './ConfirmDialog';
 
 function TaskDetail() {
   const { id } = useParams();
@@ -20,6 +21,7 @@ function TaskDetail() {
   const [alertError, setAlertError] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   useEffect(() => {
     loadTask();
@@ -143,21 +145,25 @@ function TaskDetail() {
   };
 
   const handleCompleteTask = async () => {
-    if (!window.confirm('Are you sure you want to complete this task? Make sure you have submitted the checklist.')) {
-      return;
-    }
-
-    try {
-      await completeTask(id, {
-        overall_status: task.overall_status || 'pass',
-        duration_minutes: duration,
-      });
-      loadTask();
-      setAlertSuccess({ message: 'Task completed successfully!' });
-    } catch (error) {
-      console.error('Error completing task:', error);
-      setAlertError({ message: 'Failed to complete task' });
-    }
+    setConfirmDialog({
+      title: 'Complete Task',
+      message: 'Are you sure you want to complete this task? Make sure you have submitted the checklist.',
+      confirmLabel: 'Complete',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          await completeTask(id, {
+            overall_status: task.overall_status || 'pass',
+            duration_minutes: duration,
+          });
+          loadTask();
+          setAlertSuccess({ message: 'Task completed successfully!' });
+        } catch (error) {
+          console.error('Error completing task:', error);
+          setAlertError({ message: 'Failed to complete task' });
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -186,7 +192,7 @@ function TaskDetail() {
         title="Information"
       />
       <div style={{ marginBottom: '20px' }}>
-        <Link to="/tenant/tasks" className="btn btn-secondary">Back</Link>
+        <button className="btn btn-secondary" onClick={() => navigate(-1)}>Back</button>
       </div>
 
       <div className="card">
@@ -199,7 +205,7 @@ function TaskDetail() {
             <strong>Type:</strong> <span className={`task-badge ${task.task_type}`}>{task.task_type}</span>
           </div>
           <div>
-            <strong>Template:</strong> {task.template_name || 'N/A'} ({task.template_code || 'N/A'})
+            <strong>Task Name:</strong> {task.template_name || 'N/A'} ({task.template_code || 'N/A'})
           </div>
           <div>
             <strong>Asset:</strong> {task.asset_name || 'N/A'} ({task.asset_code || 'N/A'})
@@ -309,7 +315,7 @@ function TaskDetail() {
         <div style={{ marginTop: '30px', padding: '20px', background: '#f9f9f9', borderRadius: '4px' }}>
           <h3>Task Identification</h3>
           <p><strong>This is a {task.task_type} task</strong> for the <strong>{task.asset_type || 'asset'}</strong> asset type.</p>
-          <p>Checklist Template: <strong>{task.template_name}</strong> ({task.template_code})</p>
+          <p>Task Name: <strong>{task.template_name}</strong> ({task.template_code})</p>
           {(task.task_type === 'PCM' || task.task_type === 'UCM') && task.parent_task_id && (
             <p style={{ marginTop: '10px', color: '#666' }}>
               This CM task was generated from a failed PM task. The PM task was performed by: <strong>{task.pm_performed_by_name || 'Unknown'}</strong>
@@ -317,9 +323,10 @@ function TaskDetail() {
           )}
         </div>
 
-        {/* Early Completion Request Section */}
-        {task.status === 'pending' && task.scheduled_date && 
-         task.assigned_users && task.assigned_users.some(u => u.id === user?.id) && 
+        {/* Early Completion Request Section - only show for future-dated tasks */}
+        {task.status === 'pending' && task.scheduled_date &&
+         (() => { const s = new Date(task.scheduled_date); s.setHours(0,0,0,0); const t = new Date(); t.setHours(0,0,0,0); return s > t; })() &&
+         task.assigned_users && task.assigned_users.some(u => u.id === user?.id) &&
          !task.can_open_before_scheduled && (
           <div style={{ 
             marginTop: '20px', 
@@ -596,6 +603,8 @@ function TaskDetail() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
       {/* Pause Task Modal */}
       {showPauseModal && (

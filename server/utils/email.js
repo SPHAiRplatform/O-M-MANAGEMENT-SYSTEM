@@ -97,7 +97,7 @@ async function sendEmail({ to, subject, html, text }) {
 
   // Get sender information
   const from = process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@example.com';
-  const fromName = process.env.EMAIL_FROM_NAME || 'SPHAiRPlatform';
+  const fromName = process.env.EMAIL_FROM_NAME || 'SPHAiRDigital';
 
   try {
     const mailOptions = {
@@ -149,7 +149,9 @@ async function sendTaskAssignmentEmail(user, task) {
       })
     : 'TBD';
 
-  const subject = `New Task Assigned: ${task.task_code}`;
+  const taskLabel = task.task_display_name || task.template_name || task.task_code;
+  const creatorLabel = (task.creator_display_name && String(task.creator_display_name).trim()) || 'Unknown';
+  const subject = `New Task Assigned: ${taskLabel}`;
   
   const html = `
     <!DOCTYPE html>
@@ -220,12 +222,12 @@ async function sendTaskAssignmentEmail(user, task) {
       <div class="content">
         <p>Hello ${user.full_name || user.username},</p>
         
-        <p>You have been assigned a new task in SPHAiRPlatform.</p>
+        <p>You have been assigned a new task in SPHAiRDigital.</p>
         
         <div class="task-details">
           <div class="detail-row">
-            <span class="label">Task Code:</span>
-            <span class="value">${task.task_code}</span>
+            <span class="label">Task:</span>
+            <span class="value">${taskLabel}</span>
           </div>
           <div class="detail-row">
             <span class="label">Task Type:</span>
@@ -243,12 +245,14 @@ async function sendTaskAssignmentEmail(user, task) {
         
         <p>Please log in to the system to view task details and begin work.</p>
         
+        <p><strong>Assigned by ${creatorLabel}</strong></p>
+        
         ${process.env.APP_URL ? `
           <a href="${process.env.APP_URL}/tasks/${task.id}" class="button">View Task</a>
         ` : ''}
         
         <div class="footer">
-          <p>This is an automated notification from SPHAiRPlatform.</p>
+          <p>This is an automated notification from SPHAiRDigital.</p>
           <p>Please do not reply to this email.</p>
         </div>
       </div>
@@ -290,7 +294,8 @@ async function sendTaskReminderEmail(user, task) {
       })
     : 'TBD';
 
-  const subject = `Task Reminder: ${task.task_code} - Due in 3 Days`;
+  const taskLabel = task.task_display_name || task.template_name || task.task_code;
+  const subject = `Task Reminder: ${taskLabel} - Due in 3 Days`;
   
   const html = `
     <!DOCTYPE html>
@@ -366,8 +371,8 @@ async function sendTaskReminderEmail(user, task) {
         
         <div class="task-details">
           <div class="detail-row">
-            <span class="label">Task Code:</span>
-            <span class="value">${task.task_code}</span>
+            <span class="label">Task:</span>
+            <span class="value">${taskLabel}</span>
           </div>
           <div class="detail-row">
             <span class="label">Task Type:</span>
@@ -390,7 +395,7 @@ async function sendTaskReminderEmail(user, task) {
         ` : ''}
         
         <div class="footer">
-          <p>This is an automated reminder from SPHAiRPlatform.</p>
+          <p>This is an automated reminder from SPHAiRDigital.</p>
           <p>Please do not reply to this email.</p>
         </div>
       </div>

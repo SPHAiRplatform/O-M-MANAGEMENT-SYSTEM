@@ -153,7 +153,7 @@
 .users-table-container {
   background: var(--md-white);
   border-radius: var(--md-radius-lg);
-  padding: 24px;
+  padding: 20px;
   box-shadow: var(--md-shadow-md);
   border: 1px solid var(--md-border);
 }
@@ -416,10 +416,10 @@
 
 /* Button Styles */
 .btn {
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: var(--md-radius-md);
   border: none;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -452,4 +452,13 @@
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+/* Standalone expanded detail row (used with DataTable) */
+.user-detail-row-standalone {
+  margin-top: 16px;
+  border: 1px solid var(--md-border);
+  border-radius: var(--md-radius-lg);
+  overflow: hidden;
+  background: #fafafa;
 }

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireFeature } = require('../middleware/requireFeature');
 const { requireAuth } = require('../middleware/auth');
+const { getDb } = require('../middleware/tenantContext');
 const { generateFaultLogExcel } = require('../utils/faultLogGenerator');
 const {
   getOrganizationSlugFromRequest,
@@ -66,8 +67,6 @@ module.exports = (pool) => {
 
       query += ' ORDER BY cm.generated_at DESC';
 
-      // Use getDb to ensure RLS is applied
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
       const result = await db.query(query, params);
       res.json(result.rows);
@@ -192,8 +191,6 @@ module.exports = (pool) => {
         return res.status(404).json({ error: 'CM letter not found' });
       }
       
-      // Use getDb to ensure RLS is applied
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
       
       const result = await db.query(`
@@ -293,6 +290,7 @@ module.exports = (pool) => {
   // Update CM letter status
   router.patch('/:id/status', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const { status, resolved_at } = req.body;
       const updateFields = ['status = $1'];
       const params = [status];
@@ -307,10 +305,10 @@ module.exports = (pool) => {
 
       params.push(req.params.id);
 
-      const result = await pool.query(
-        `UPDATE cm_letters 
+      const result = await db.query(
+        `UPDATE cm_letters
          SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $${paramCount} 
+         WHERE id = $${paramCount}
          RETURNING *`,
         params
       );
@@ -328,6 +326,7 @@ module.exports = (pool) => {
   // Update CM letter fault log data
   router.patch('/:id/fault-log', requireAuth, async (req, res) => {
     try {
+      const db = getDb(req, pool);
       const {
         reported_by,
         plant,
@@ -346,7 +345,7 @@ module.exports = (pool) => {
       } = req.body;
 
       // First, check if the fault log columns exist
-      const columnCheck = await pool.query(`
+      const columnCheck = await db.query(`
         SELECT column_name 
         FROM information_schema.columns 
         WHERE table_name = 'cm_letters' 
@@ -438,10 +437,10 @@ module.exports = (pool) => {
       params.push(req.params.id);
       updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
 
-      const result = await pool.query(
-        `UPDATE cm_letters 
+      const result = await db.query(
+        `UPDATE cm_letters
          SET ${updateFields.join(', ')}
-         WHERE id = $${paramCount} 
+         WHERE id = $${paramCount}
          RETURNING *`,
         params
       );

@@ -101,6 +101,8 @@ function buildExcelTemplateVars(templateData) {
     started_at: safe(templateData?.task?.start_hour),   // time task started
     finished_at: safe(templateData?.task?.finished_hour), // time task ended
     last_revision_date: safe(templateData?.template?.last_revision_date),
+    checklist_made_by: safe(templateData?.template?.checklist_made_by),
+    last_revision_approved_by: safe(templateData?.template?.last_revision_approved_by),
 
     // Observations blocks
     final_observations: safe(templateData?.observations),

@@ -338,6 +338,262 @@
   font-size: 12px;
 }
 
+/* ═══════════════════════════════════════════════════════════════ */
+/* INDIVIDUAL PERFORMANCE SECTION                                 */
+/* ═══════════════════════════════════════════════════════════════ */
+
+.performance-divider {
+  margin: 48px 0 32px;
+  padding: 24px 0 16px;
+  border-top: 2px solid var(--md-border);
+}
+
+.performance-divider-title {
+  margin: 0 0 8px 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--md-text-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.performance-divider-title i {
+  color: #9C27B0;
+  font-size: 1.5rem;
+}
+
+.performance-divider-subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--md-text-main);
+}
+
+/* Performance Summary KPI Cards */
+.performer-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.performer-kpi-card {
+  background: var(--md-white);
+  border-radius: var(--md-radius-lg);
+  padding: 20px;
+  box-shadow: var(--md-shadow-md);
+  border: 1px solid var(--md-border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.performer-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--md-shadow-lg);
+}
+
+.performer-kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.performer-kpi-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.performer-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--md-text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.performer-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--md-text-dark);
+  line-height: 1.2;
+}
+
+.performer-kpi-sub {
+  font-size: 11px;
+  color: var(--md-text-main);
+  margin-top: 2px;
+}
+
+/* Performer Table */
+.performer-table th {
+  font-size: 12px;
+}
+
+.sortable-col {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.sortable-col:hover {
+  background-color: #eaecef;
+}
+
+.performer-rank {
+  font-weight: 700;
+  color: var(--md-text-main);
+  text-align: center;
+  width: 40px;
+}
+
+.performer-name {
+  font-weight: 600;
+  color: var(--md-text-dark);
+  font-size: 14px;
+}
+
+.performer-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.role-badge.badge-admin {
+  background: #9c27b0;
+}
+
+.role-badge.badge-supervisor {
+  background: #ff9800;
+  color: #333;
+}
+
+.role-badge.badge-technician {
+  background: #0288d1;
+}
+
+.performer-org {
+  font-size: 11px;
+  color: var(--md-text-main);
+  font-style: italic;
+}
+
+/* Score Badges */
+.score-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  min-width: 44px;
+}
+
+.score-badge.high {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.score-badge.medium {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.score-badge.low {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.score-badge.overall {
+  font-weight: 700;
+  font-size: 14px;
+  min-width: 40px;
+}
+
+/* Score Bar (mini progress bar in overall score column) */
+.overall-score-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-bar {
+  flex: 1;
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 50px;
+  max-width: 80px;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.score-bar-fill.high {
+  background: #4caf50;
+}
+
+.score-bar-fill.medium {
+  background: #ff9800;
+}
+
+.score-bar-fill.low {
+  background: #f44336;
+}
+
+/* Flagged count */
+.flagged-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffebee;
+  color: #c62828;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 24px;
+}
+
+.no-flags {
+  color: #bbb;
+  font-size: 12px;
+}
+
+/* Performer count label */
+.performer-count {
+  font-size: 13px;
+  color: var(--md-text-main);
+  background: #f5f5f5;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .platform-analytics-container {
@@ -362,5 +618,19 @@
 
   .doughnut-wrapper {
     height: 250px;
+  }
+
+  .performer-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .performance-divider-title {
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .performer-kpi-grid {
+    grid-template-columns: 1fr;
   }
 }

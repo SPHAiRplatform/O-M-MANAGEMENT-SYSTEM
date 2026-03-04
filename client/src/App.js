@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getApiBaseUrl } from './api/api';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getUnreadNotificationCount, getCurrentOrganizationBranding } from './api/api';
 import Dashboard from './components/Dashboard';
@@ -21,11 +21,14 @@ import Calendar from './components/Calendar';
 import Plant from './components/Plant';
 import OrganizationManagement from './components/OrganizationManagement';
 import OrganizationSettings from './components/OrganizationSettings';
-import OrganizationFeatures from './components/OrganizationFeatures';
 import OrganizationBranding from './components/OrganizationBranding';
 import PlatformDashboard from './components/PlatformDashboard';
 import PlatformUsers from './components/PlatformUsers';
 import PlatformAnalytics from './components/PlatformAnalytics';
+import ScadaConfig from './components/ScadaConfig';
+import ScadaDashboard from './components/ScadaDashboard';
+import AuditLog from './components/AuditLog';
+import PlatformSettings from './components/PlatformSettings';
 import ProtectedRoute from './components/ProtectedRoute';
 import PasswordChangeModal from './components/PasswordChangeModal';
 // LicenseStatus removed - no longer needed
@@ -40,6 +43,20 @@ import FeatureGate from './components/FeatureGate';
 import syncManager from './utils/syncManager';
 import { loadAndApplyCompanyColors, resetCompanyColors } from './utils/companyColors';
 import './App.css';
+
+// Helper component for redirects with route parameters
+function ParamRedirect({ to }) {
+  const params = useParams();
+  let path = to;
+  for (const [key, value] of Object.entries(params)) {
+    path = path.replace(`:${key}`, value);
+  }
+  // Handle splat/wildcard params
+  if (params['*']) {
+    path = path.replace('*', params['*']);
+  }
+  return <Navigate to={path} replace />;
+}
 
 function App() {
   return (
@@ -212,14 +229,6 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/platform/organizations/:id/features" 
-            element={
-              <ProtectedRoute requireRole="system_owner">
-                <OrganizationFeatures />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
             path="/platform/organizations/:id/branding" 
             element={
               <ProtectedRoute requireRole="system_owner">
@@ -235,15 +244,39 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/platform/analytics" 
+          <Route
+            path="/platform/analytics"
             element={
               <ProtectedRoute requireRole="system_owner">
                 <PlatformAnalytics />
               </ProtectedRoute>
-            } 
+            }
           />
-          
+          <Route
+            path="/platform/scada"
+            element={
+              <ProtectedRoute requireRole="system_owner">
+                <ScadaConfig />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/platform/audit-log"
+            element={
+              <ProtectedRoute requireRole="system_owner">
+                <AuditLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/platform/settings"
+            element={
+              <ProtectedRoute requireRole="system_owner">
+                <PlatformSettings />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Default route - redirects system owners to platform dashboard, others to tenant dashboard */}
           <Route 
             path="/" 
@@ -306,7 +339,7 @@ function AppContent() {
           <Route 
             path="/tenant/checklist-templates" 
             element={
-              <ProtectedRoute requireAdmin={true}>
+              <ProtectedRoute requireRole="system_owner">
                 <FeatureGate feature="templates">
                   <ChecklistTemplates />
                 </FeatureGate>
@@ -360,6 +393,14 @@ function AppContent() {
             } 
           />
           <Route 
+            path="/tenant/audit-log" 
+            element={
+              <ProtectedRoute requireRole="system_owner">
+                <AuditLog />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/tenant/calendar" 
             element={
               <ProtectedRoute>
@@ -378,24 +419,34 @@ function AppContent() {
               </ProtectedRoute>
             } 
           /> */}
-          <Route 
-            path="/tenant/plant" 
+          <Route
+            path="/tenant/plant"
             element={
               <ProtectedRoute>
                 <FeatureGate feature="plant">
                   <Plant />
                 </FeatureGate>
               </ProtectedRoute>
-            } 
+            }
           />
-          
+          <Route
+            path="/tenant/scada"
+            element={
+              <ProtectedRoute>
+                <FeatureGate feature="scada">
+                  <ScadaDashboard />
+                </FeatureGate>
+              </ProtectedRoute>
+            }
+          />
+
           {/* Backward compatibility: Redirect old routes to tenant routes */}
           <Route path="/dashboard" element={<Navigate to="/tenant/dashboard" replace />} />
           <Route path="/tasks/pm" element={<Navigate to="/tenant/tasks/pm" replace />} />
           <Route path="/tasks/inspection" element={<Navigate to="/tenant/tasks/inspection" replace />} />
           <Route path="/tasks" element={<Navigate to="/tenant/tasks" replace />} />
-          <Route path="/tasks/:id" element={<Navigate to="/tenant/tasks/:id" replace />} />
-          <Route path="/tasks/:id/checklist" element={<Navigate to="/tenant/tasks/:id/checklist" replace />} />
+          <Route path="/tasks/:id" element={<ParamRedirect to="/tenant/tasks/:id" />} />
+          <Route path="/tasks/:id/checklist" element={<ParamRedirect to="/tenant/tasks/:id/checklist" />} />
           <Route path="/checklist-templates" element={<Navigate to="/tenant/checklist-templates" replace />} />
           <Route path="/cm-letters" element={<Navigate to="/tenant/cm-letters" replace />} />
           <Route path="/inventory" element={<Navigate to="/tenant/inventory" replace />} />
@@ -408,9 +459,8 @@ function AppContent() {
           
           {/* Backward compatibility: Redirect old organization routes to platform routes */}
           <Route path="/organizations" element={<Navigate to="/platform/organizations" replace />} />
-          <Route path="/organizations/:id/settings" element={<Navigate to="/platform/organizations/:id/settings" replace />} />
-          <Route path="/organizations/:id/features" element={<Navigate to="/platform/organizations/:id/features" replace />} />
-          <Route path="/organizations/:id/branding" element={<Navigate to="/platform/organizations/:id/branding" replace />} />
+          <Route path="/organizations/:id/settings" element={<ParamRedirect to="/platform/organizations/:id/settings" />} />
+          <Route path="/organizations/:id/branding" element={<ParamRedirect to="/platform/organizations/:id/branding" />} />
         </Routes>
       </div>
     </>
@@ -473,8 +523,27 @@ function Header() {
   const { hasFeature } = useOrganizationFeatures();
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [tasksDropdownTimeout, setTasksDropdownTimeout] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedOrgName, setSelectedOrgName] = useState(null);
   const [userOrgName, setUserOrgName] = useState(null);
+  const [orgList, setOrgList] = useState([]);
+  const [orgSwitcherOpen, setOrgSwitcherOpen] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // Load unread notification count (so mobile users see badge next to name before opening menu)
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const response = await getUnreadNotificationCount();
+        setUnreadNotificationCount(response.data?.count ?? 0);
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadUnreadCount();
+    const interval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Helper function to get company abbreviation
   const getCompanyAbbreviation = (name) => {
@@ -557,6 +626,50 @@ function Header() {
     loadUserOrganization();
   }, [user, isSuperAdmin]);
 
+  // Close org switcher when clicking outside
+  useEffect(() => {
+    if (!orgSwitcherOpen) return;
+    const handleClick = () => setOrgSwitcherOpen(false);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [orgSwitcherOpen]);
+
+  // Load organizations for system_owner org-switcher
+  // Re-fetch whenever navigating (e.g. after deleting an org on the platform page)
+  useEffect(() => {
+    if (user && isSuperAdmin()) {
+      const loadOrgs = async () => {
+        try {
+          const response = await fetch(`${getApiBaseUrl()}/platform/organizations`, { credentials: 'include' });
+          if (response.ok) {
+            const data = await response.json();
+            setOrgList((data || []).filter(o => o.is_active !== false));
+          }
+        } catch (err) {
+          console.error('Error loading organizations for switcher:', err);
+        }
+      };
+      loadOrgs();
+    }
+  }, [user, isSuperAdmin, location.pathname]);
+
+  const handleSwitchOrg = (org) => {
+    // Set session storage and navigate instantly
+    sessionStorage.setItem('selectedOrganizationId', org.id);
+    sessionStorage.setItem('selectedOrganizationSlug', org.slug);
+    sessionStorage.setItem('selectedOrganizationName', org.name);
+    setSelectedOrgName(org.name);
+    setOrgSwitcherOpen(false);
+    navigate('/tenant/dashboard');
+
+    // Fire the API call in the background (sets server-side session)
+    fetch(`${getApiBaseUrl()}/organizations/${org.id}/enter`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch(err => console.error('Error setting org session:', err));
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -612,31 +725,111 @@ function Header() {
   return (
     <div className="header">
       <div className="header-top">
-        <h1>
-          {isInTenantRoute && companyAbbreviation ? (
-            `${companyAbbreviation} O&M System`
-          ) : (
-            'O&M System'
-          )}
-        </h1>
+        <Link
+          to={isInTenantRoute ? '/tenant/dashboard' : '/platform/dashboard'}
+          className="header-title-link"
+          aria-label="Go to dashboard"
+        >
+          <h1>
+            {isInTenantRoute && companyAbbreviation ? (
+              `${companyAbbreviation} O&M System`
+            ) : (
+              'O&M System'
+            )}
+          </h1>
+        </Link>
         <div className="header-user">
+          {isSuperAdmin() && isInTenantMode && orgList.length > 1 && (
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={(e) => { e.stopPropagation(); setOrgSwitcherOpen(!orgSwitcherOpen); }}
+                style={{ marginRight: '4px', fontSize: '11px', padding: '4px 10px' }}
+                title="Switch company"
+              >
+                Switch
+              </button>
+              {orgSwitcherOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    zIndex: 1100,
+                    minWidth: '200px',
+                    maxHeight: '250px',
+                    overflowY: 'auto',
+                    marginTop: '4px'
+                  }}
+                >
+                  {orgList.map(org => (
+                    <div
+                      key={org.id}
+                      onClick={() => handleSwitchOrg(org)}
+                      style={{
+                        padding: '10px 14px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        color: '#333',
+                        borderBottom: '1px solid #f0f0f0',
+                        background: sessionStorage.getItem('selectedOrganizationId') === org.id ? '#e3f2fd' : 'transparent',
+                        fontWeight: sessionStorage.getItem('selectedOrganizationId') === org.id ? '600' : '400'
+                      }}
+                      onMouseEnter={(e) => e.target.style.background = '#f5f5f5'}
+                      onMouseLeave={(e) => e.target.style.background = sessionStorage.getItem('selectedOrganizationId') === org.id ? '#e3f2fd' : 'transparent'}
+                    >
+                      {org.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {isInTenantMode && (
-            <button 
-              className="btn btn-sm btn-secondary" 
+            <button
+              className="btn btn-sm btn-secondary"
               onClick={handleExitCompany}
               style={{ marginRight: '10px' }}
               title={`Exit ${selectedOrgName}`}
             >
-              Exit Company
+              Exit
             </button>
           )}
-          <span className="user-name">{user.full_name || user.username}</span>
+          <span className="user-name-with-badge">
+            <Link to="/tenant/notifications" className="user-name" title="Notifications">
+              {(() => {
+                const full = (user.full_name || user.username || '').trim();
+                const firstName = full ? full.split(/\s+/)[0] : full;
+                return firstName || 'User';
+              })()}
+            </Link>
+            {unreadNotificationCount > 0 && location.pathname !== '/tenant/notifications' && (
+              <span className="header-notification-badge" title={`${unreadNotificationCount} unread notification${unreadNotificationCount !== 1 ? 's' : ''}`}>
+                {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+              </span>
+            )}
+          </span>
           <button className="btn btn-sm btn-secondary header-logout" onClick={handleLogout}>
             Logout
           </button>
         </div>
       </div>
-      <nav className="nav">
+      <button
+        className="hamburger-btn"
+        onClick={() => setMobileNavOpen(!mobileNavOpen)}
+        aria-label="Toggle navigation"
+      >
+        <span className={`hamburger-icon ${mobileNavOpen ? 'open' : ''}`}>
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </button>
+      <nav className={`nav ${mobileNavOpen ? 'nav-open' : ''}`} onClick={(e) => { if (e.target.tagName === 'A') setMobileNavOpen(false); }}>
         {/* Platform Dashboard link for system owners */}
         {isSuperAdmin() && (
           <Link 
@@ -747,7 +940,7 @@ function Header() {
                                    !hasRole('technician') && 
                                    !hasRole('inventory_controller') && 
                                    !hasRole('supervisor');
-          return canViewTemplates && (
+          return canViewTemplates && isSuperAdmin() && (
             <Link to="/tenant/checklist-templates" className={location.pathname === '/tenant/checklist-templates' ? 'active' : ''}>
               Templates
             </Link>
@@ -773,9 +966,19 @@ function Header() {
             Plant
           </Link>
         )}
+        {hasFeature('scada') && (
+          <Link to="/tenant/scada" className={location.pathname === '/tenant/scada' ? 'active' : ''}>
+            SCADA
+          </Link>
+        )}
         {isAdmin() && hasFeature('users') && (
           <Link to="/tenant/users" className={location.pathname === '/tenant/users' ? 'active' : ''}>
             Users
+          </Link>
+        )}
+        {isSuperAdmin() && (
+          <Link to="/tenant/audit-log" className={location.pathname === '/tenant/audit-log' ? 'active' : ''}>
+            Audit Log
           </Link>
         )}
         {/* License link removed - no longer needed */}
@@ -794,6 +997,15 @@ function Header() {
             </Link>
             <Link to="/platform/analytics" className={location.pathname === '/platform/analytics' ? 'active' : ''}>
               Analytics
+            </Link>
+            <Link to="/platform/scada" className={location.pathname === '/platform/scada' ? 'active' : ''}>
+              SCADA
+            </Link>
+            <Link to="/platform/audit-log" className={location.pathname === '/platform/audit-log' ? 'active' : ''}>
+              Audit Log
+            </Link>
+            <Link to="/platform/settings" className={location.pathname === '/platform/settings' ? 'active' : ''}>
+              Settings
             </Link>
           </>
         )}

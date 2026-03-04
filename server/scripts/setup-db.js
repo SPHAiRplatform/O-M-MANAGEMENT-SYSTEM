@@ -114,6 +114,7 @@ async function setupDatabase() {
     const migrations = [
       'create_platform_migrations_table.sql',
       'create_platform_updates_table.sql',
+      'create_platform_settings_table.sql',
       'add_pm_performed_by_to_cm_tasks.sql',
       'add_task_metadata.sql',
       'add_draft_responses.sql',
@@ -132,7 +133,8 @@ async function setupDatabase() {
       'add_spares_used_to_tasks_and_responses.sql',
       'add_fault_log_fields_to_cm_letters.sql',
       'add_hours_tracking_and_notifications.sql', // Must run before add_multiple_task_assignments (adds assigned_at to tasks)
-      'add_multiple_task_assignments.sql' // Depends on assigned_at column from add_hours_tracking_and_notifications
+      'add_multiple_task_assignments.sql', // Depends on assigned_at column from add_hours_tracking_and_notifications
+      'add_password_reset_columns.sql'
     ];
     
     for (const migrationFile of migrations) {

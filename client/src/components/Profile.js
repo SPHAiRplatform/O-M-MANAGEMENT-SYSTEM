@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getProfile, updateProfile, uploadProfileImage, removeProfileImage } from '../api/api';
 import { getApiBaseUrl } from '../api/api';
+import { ConfirmDialog } from './ConfirmDialog';
 import './Profile.css';
 
 function Profile() {
@@ -9,6 +10,7 @@ function Profile() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState(null);
   
   // Initialize profile data from current user context (for immediate display)
   const nameParts = (user?.full_name || '').split(' ').filter(p => p.trim());
@@ -306,41 +308,45 @@ function Profile() {
   };
 
   const handleRemoveImage = async () => {
-    if (!window.confirm('Are you sure you want to remove your profile image?')) {
-      return;
-    }
+    setConfirmDialog({
+      title: 'Remove Profile Image',
+      message: 'Are you sure you want to remove your profile image?',
+      confirmLabel: 'Remove',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          setUploadingImage(true);
+          setError('');
 
-    try {
-      setUploadingImage(true);
-      setError('');
-      
-      const response = await removeProfileImage();
-      console.log('[PROFILE] Remove response:', response.data);
-      
-      // Clear profile image and show default
-      setProfileImage(null);
-      setImagePreview(getDefaultProfileImage());
-      
-      // Update user context
-      if (setUser) {
-        setUser({
-          ...user,
-          profile_image: null
-        });
+          const response = await removeProfileImage();
+          console.log('[PROFILE] Remove response:', response.data);
+
+          // Clear profile image and show default
+          setProfileImage(null);
+          setImagePreview(getDefaultProfileImage());
+
+          // Update user context
+          if (setUser) {
+            setUser({
+              ...user,
+              profile_image: null
+            });
+          }
+
+          setSuccess('Profile image removed successfully!');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          console.error('[PROFILE] Error removing image:', error);
+          const errorMessage = error.response?.data?.error ||
+                              error.response?.data?.details ||
+                              error.message ||
+                              'Failed to remove image. Please try again.';
+          setError(errorMessage);
+        } finally {
+          setUploadingImage(false);
+        }
       }
-      
-      setSuccess('Profile image removed successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      console.error('[PROFILE] Error removing image:', error);
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.details || 
-                          error.message || 
-                          'Failed to remove image. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setUploadingImage(false);
-    }
+    });
   };
 
   const getRoleBadgeClass = (role) => {
@@ -598,6 +604,8 @@ function Profile() {
           </form>
         </div>
       </div>
+
+      <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
     </div>
   );
 }

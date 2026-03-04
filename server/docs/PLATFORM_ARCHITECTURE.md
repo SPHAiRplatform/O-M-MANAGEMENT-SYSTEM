@@ -1,8 +1,8 @@
-# SPHAiRPlatform Architecture - Platform That Hosts Companies
+# SPHAiRDigital Architecture - Platform That Hosts Companies
 
 ## Overview
 
-SPHAiRPlatform is a **multi-tenant SaaS platform** that hosts multiple companies. Each company has isolated data, customizable templates, settings, features, and branding.
+SPHAiRDigital is a **multi-tenant SaaS platform** that hosts multiple companies. Each company has isolated data, customizable templates, settings, features, and branding.
 
 ## Route Structure
 
@@ -148,7 +148,7 @@ if (isTenantRoute) {
 ## Header Display
 
 ### Platform Routes:
-- Shows: "SPHAiRPlatform" or "Platform Admin"
+- Shows: "SPHAiRDigital" or "Platform Admin"
 - No company abbreviation
 - Platform-level navigation
 

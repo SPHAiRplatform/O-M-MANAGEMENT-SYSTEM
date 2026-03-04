@@ -1,6 +1,6 @@
 # PostgreSQL Setup — Running the App on Another PC
 
-Use this guide when moving the ChecksheetsApp (SPHAiRPlatform) to a new machine. It covers database configuration and how to run the app against a local PostgreSQL instance.
+Use this guide when moving the ChecksheetsApp (SPHAiRDigital) to a new machine. It covers database configuration and how to run the app against a local PostgreSQL instance.
 
 ---
 

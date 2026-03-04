@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getTasks, createTask, getChecklistTemplates, getUsers } from '../api/api';
+import { getTasks, createTask, bulkDeleteTasks, getChecklistTemplates, getUsers } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { getErrorMessage } from '../utils/errorHandler';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
+import './Tasks.css';
 
 function Tasks() {
-  const { isAdmin, isSuperAdmin, user, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, isTechnician, user, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -18,8 +19,9 @@ function Tasks() {
     task_type: '',
     completed_date: '',
   });
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const tasksPerPage = 4;
+  const tasksPerPage = 10;
 
   const [newTask, setNewTask] = useState({
     checklist_template_id: '',
@@ -32,6 +34,13 @@ function Tasks() {
   });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [assignToDropdownOpen, setAssignToDropdownOpen] = useState(false);
+  const [assignToSearch, setAssignToSearch] = useState('');
+  const assignToDropdownRef = useRef(null);
 
   useEffect(() => {
     // Wait for AuthContext to finish loading before checking organization context
@@ -41,10 +50,10 @@ function Tasks() {
     
     loadTasks();
     loadTemplates();
-    if (isAdmin()) {
+    if (isAdmin() || isTechnician()) {
       loadUsers();
     }
-  }, [filters, isAdmin, authLoading]);
+  }, [filters, isAdmin, isTechnician, authLoading]);
 
   const loadTasks = async () => {
     try {
@@ -62,6 +71,7 @@ function Tasks() {
       
       const response = await getTasks(params);
       setTasks(response.data);
+      setSelectedTaskIds([]); // Clear selection on reload
       setLoading(false);
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -107,6 +117,7 @@ function Tasks() {
       return;
     }
     
+    setCreating(true);
     try {
       // Allow manual scheduling for all task types
       // If not provided, backend will set appropriate defaults
@@ -136,13 +147,75 @@ function Tasks() {
         budgeted_hours: ''
       });
       loadTasks();
-      setSuccess(`Task created successfully! Task Code: ${response.data.task_code}`);
+      const taskLabel = (response.data.template_name && response.data.template_name.trim()) ? response.data.template_name : response.data.task_code;
+      setSuccess(`Task created successfully! Task: ${taskLabel}`);
     } catch (err) {
       console.error('Error creating task:', err);
       const errorMessage = getErrorMessage(err, 'Failed to create task');
       setError({ message: `Failed to create task: ${errorMessage}` });
+    } finally {
+      setCreating(false);
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedTaskIds.length === 0) return;
+    setDeleting(true);
+    try {
+      const response = await bulkDeleteTasks(selectedTaskIds);
+      setSuccess(response.data.message);
+      setSelectedTaskIds([]);
+      setShowDeleteConfirm(false);
+      loadTasks();
+    } catch (err) {
+      console.error('Error deleting tasks:', err);
+      const errorMessage = getErrorMessage(err, 'Failed to delete tasks');
+      setError({ message: errorMessage });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleTaskSelection = (taskId) => {
+    setSelectedTaskIds(prev =>
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const toggleSelectAll = (filteredTasks) => {
+    const currentPageIds = filteredTasks
+      .slice((currentPage - 1) * tasksPerPage, currentPage * tasksPerPage)
+      .map(t => t.id);
+    const allSelected = currentPageIds.every(id => selectedTaskIds.includes(id));
+    if (allSelected) {
+      setSelectedTaskIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+    } else {
+      setSelectedTaskIds(prev => [...new Set([...prev, ...currentPageIds])]);
+    }
+  };
+
+  const assignableUsers = users.filter(u => {
+    if (!u.is_active) return false;
+    const userRoles = Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : []);
+    return userRoles.some(r => r === 'admin' || r === 'technician');
+  });
+  const assignToFilteredUsers = assignToSearch.trim()
+    ? assignableUsers.filter(u => {
+        const name = (u.full_name || u.username || '').toLowerCase();
+        return name.includes(assignToSearch.trim().toLowerCase());
+      })
+    : assignableUsers;
+
+  useEffect(() => {
+    if (!assignToDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (assignToDropdownRef.current && !assignToDropdownRef.current.contains(e.target)) {
+        setAssignToDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [assignToDropdownOpen]);
 
   if (loading) {
     return <div className="loading">Loading tasks...</div>;
@@ -154,8 +227,8 @@ function Tasks() {
       <SuccessAlert message={success} onClose={() => setSuccess(null)} title="Success" />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h2 className="page-title" style={{ marginBottom: 0 }}>PM Tasks</h2>
-        {isAdmin() && (
-          <button className="btn btn-sm btn-primary" onClick={() => setShowCreateForm(!showCreateForm)} style={{ padding: '8px 16px', fontSize: '13px' }}>
+        {(isAdmin() || isTechnician()) && (
+          <button className="btn btn-sm btn-primary" onClick={() => setShowCreateForm(!showCreateForm)}>
             {showCreateForm ? 'Cancel' : 'New'}
           </button>
         )}
@@ -166,13 +239,13 @@ function Tasks() {
           <h3>New Task</h3>
           <form onSubmit={handleCreateTask}>
             <div className="form-group">
-              <label>Checklist Template</label>
+              <label>Task Name</label>
               <select
                 value={newTask.checklist_template_id}
                 onChange={(e) => setNewTask({ ...newTask, checklist_template_id: e.target.value })}
                 required
               >
-                <option value="">Select template...</option>
+                <option value="">Select task...</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.template_name} ({t.template_code})
@@ -193,109 +266,94 @@ function Tasks() {
                 Optional: Specify the location for this task
               </small>
             </div>
-            {isAdmin() && (
-              <div className="form-group">
+            {(isAdmin() || isTechnician()) && (
+              <div className="form-group assign-to-users-wrap" ref={assignToDropdownRef}>
                 <label>Assign To (Users)</label>
-                <select
-                  multiple
-                  value={newTask.assigned_to}
-                  onChange={(e) => {
-                    const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-                    setNewTask({ ...newTask, assigned_to: selectedOptions });
-                  }}
-                  style={{
-                    width: '100%',
-                    minHeight: '120px',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd',
-                    fontSize: '14px',
-                    backgroundColor: '#fff',
-                    WebkitAppearance: 'menulist', // Better mobile support
-                    appearance: 'menulist'
-                  }}
-                  size={Math.min(users.filter(u => {
-                    if (!u.is_active) return false;
-                    // Check if user has admin or technician role
-                    const userRoles = Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : []);
-                    return userRoles.some(r => r === 'admin' || r === 'technician');
-                  }).length, 4)} // Show max 4 options at once for mobile
+                <div
+                  className="assign-to-users-field"
+                  role="combobox"
+                  aria-expanded={assignToDropdownOpen}
+                  aria-haspopup="listbox"
+                  aria-label="Select users to assign"
                 >
-                  {users.filter(u => {
-                    if (!u.is_active) return false;
-                    // Check if user has admin or technician role
-                    const userRoles = Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : []);
-                    return userRoles.some(r => r === 'admin' || r === 'technician');
-                  }).map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name}
-                    </option>
-                  ))}
-                </select>
-                {newTask.assigned_to.length > 0 && (
-                  <div style={{ marginTop: '10px' }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: '6px',
-                      padding: '8px',
-                      backgroundColor: '#f8f9fa',
-                      borderRadius: '4px',
-                      border: '1px solid #e9ecef'
-                    }}>
-                      {newTask.assigned_to.map(userId => {
-                        const user = users.find(u => u.id === userId);
-                        return user ? (
-                          <span 
-                            key={userId}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              padding: '4px 10px',
-                              backgroundColor: '#007bff',
-                              color: '#fff',
-                              borderRadius: '16px',
-                              fontSize: '12px',
-                              fontWeight: '500'
-                            }}
-                          >
-                            {user.full_name || user.username}
+                  <div className="assign-to-users-chips">
+                    {newTask.assigned_to.length === 0 ? (
+                      <span className="assign-to-users-placeholder">Select users to assign...</span>
+                    ) : (
+                      newTask.assigned_to.map(userId => {
+                        const u = users.find(x => x.id === userId);
+                        return u ? (
+                          <span key={userId} className="assign-to-chip">
+                            {u.full_name || u.username}
                             <button
                               type="button"
+                              className="assign-to-chip-remove"
                               onClick={(e) => {
                                 e.preventDefault();
-                                setNewTask({ 
-                                  ...newTask, 
-                                  assigned_to: newTask.assigned_to.filter(id => id !== userId) 
-                                });
+                                e.stopPropagation();
+                                setNewTask({ ...newTask, assigned_to: newTask.assigned_to.filter(id => id !== userId) });
                               }}
-                              style={{
-                                marginLeft: '6px',
-                                background: 'rgba(255,255,255,0.3)',
-                                border: 'none',
-                                color: '#fff',
-                                borderRadius: '50%',
-                                width: '18px',
-                                height: '18px',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                lineHeight: '1',
-                                padding: '0',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                              title="Remove"
+                              aria-label={`Remove ${u.full_name || u.username}`}
                             >
                               ×
                             </button>
                           </span>
                         ) : null;
-                      })}
-                    </div>
-                    <div style={{ marginTop: '5px', fontSize: '12px', color: '#28a745', fontWeight: '500' }}>
-                      {newTask.assigned_to.length} user{newTask.assigned_to.length !== 1 ? 's' : ''} selected
-                    </div>
+                      })
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="assign-to-users-trigger"
+                    onClick={() => { setAssignToDropdownOpen(!assignToDropdownOpen); setAssignToSearch(''); }}
+                    aria-label={assignToDropdownOpen ? 'Close user list' : 'Open user list'}
+                  >
+                    {assignToDropdownOpen ? '▲' : '▼'}
+                  </button>
+                </div>
+                {assignToDropdownOpen && (
+                  <div className="assign-to-users-dropdown">
+                    <input
+                      type="text"
+                      className="assign-to-users-search"
+                      placeholder="Search by name..."
+                      value={assignToSearch}
+                      onChange={(e) => setAssignToSearch(e.target.value)}
+                      autoFocus
+                    />
+                    <ul className="assign-to-users-list" role="listbox">
+                      {assignToFilteredUsers.length === 0 ? (
+                        <li className="assign-to-users-list-empty">No users match</li>
+                      ) : (
+                        assignToFilteredUsers.map((u) => {
+                          const isSelected = newTask.assigned_to.includes(u.id);
+                          return (
+                            <li
+                              key={u.id}
+                              role="option"
+                              aria-selected={isSelected}
+                              className={`assign-to-users-option ${isSelected ? 'selected' : ''}`}
+                              onClick={() => {
+                                setNewTask({
+                                  ...newTask,
+                                  assigned_to: isSelected
+                                    ? newTask.assigned_to.filter(id => id !== u.id)
+                                    : [...newTask.assigned_to, u.id]
+                                });
+                              }}
+                            >
+                              <span className="assign-to-users-option-name">{u.full_name || u.username}</span>
+                              {isSelected && <span className="assign-to-users-option-check">✓</span>}
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                  </div>
+                )}
+                {newTask.assigned_to.length > 0 && (
+                  <div className="assign-to-users-count">
+                    {newTask.assigned_to.length} user{newTask.assigned_to.length !== 1 ? 's' : ''} selected
                   </div>
                 )}
               </div>
@@ -360,14 +418,26 @@ function Tasks() {
                 </small>
               </div>
             )}
-            <button type="submit" className="btn btn-primary">Create</button>
+            <button type="submit" className={`btn btn-primary ${creating ? 'btn-loading' : ''}`} disabled={creating}>
+              <span>Create</span>
+            </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div style={{ marginBottom: '15px' }}>
+        <div className="tasks-filters" style={{ marginBottom: '15px' }}>
           <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Filters</h3>
+          <div style={{ marginBottom: '12px' }}>
+              <input
+                type="text"
+                className="tasks-search-input"
+                placeholder="Search by task code, task name, location, or assignee..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                style={{ width: '100%', padding: '10px 12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '6px', boxSizing: 'border-box' }}
+              />
+            </div>
           <div className="filters-container" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
               <label>Status</label>
@@ -422,10 +492,11 @@ function Tasks() {
           </p>
         ) : (
           <>
-            {(filters.status || filters.task_type || filters.completed_date) && (
+            {(filters.status || filters.task_type || filters.completed_date || searchQuery.trim()) && (
               <div style={{ marginBottom: '15px', padding: '12px', background: '#e3f2fd', borderRadius: '8px', borderLeft: '4px solid #1A73E8' }}>
                 <div style={{ fontSize: '14px', color: '#666' }}>
-                  Active filters: 
+                  Active filters:
+                  {searchQuery.trim() && <span style={{ marginLeft: '8px', padding: '4px 8px', background: '#fff', borderRadius: '4px' }}>Search: "{searchQuery.trim()}"</span>}
                   {filters.status && <span style={{ marginLeft: '8px', padding: '4px 8px', background: '#fff', borderRadius: '4px' }}>Status: {filters.status}</span>}
                   {filters.task_type && <span style={{ marginLeft: '8px', padding: '4px 8px', background: '#fff', borderRadius: '4px' }}>Type: {filters.task_type}</span>}
                   {filters.completed_date && <span style={{ marginLeft: '8px', padding: '4px 8px', background: '#fff', borderRadius: '4px' }}>Completed: {new Date(filters.completed_date).toLocaleDateString()}</span>}
@@ -433,21 +504,116 @@ function Tasks() {
               </div>
             )}
             
+            {/* Delete confirmation modal */}
+            {showDeleteConfirm && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <div style={{
+                  background: '#fff', borderRadius: '8px', padding: '24px',
+                  maxWidth: '420px', width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', color: '#dc3545' }}>
+                    <i className="bi bi-exclamation-triangle-fill" style={{ marginRight: '8px' }}></i>
+                    Confirm Delete
+                  </h3>
+                  <p style={{ margin: '0 0 8px 0', color: '#333' }}>
+                    Are you sure you want to permanently delete <strong>{selectedTaskIds.length}</strong> task{selectedTaskIds.length !== 1 ? 's' : ''}?
+                  </p>
+                  <p style={{ margin: '0 0 20px 0', color: '#999', fontSize: '13px' }}>
+                    This will also delete all associated checklist responses, assignments, and reports. This action cannot be undone.
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={deleting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className={`btn btn-danger ${deleting ? 'btn-loading' : ''}`}
+                      onClick={handleBulkDelete}
+                      disabled={deleting}
+                      style={{ background: '#dc3545', color: '#fff', border: 'none' }}
+                    >
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Selection action bar */}
+            {isSuperAdmin() && selectedTaskIds.length > 0 && (
+              <div style={{
+                marginBottom: '12px', padding: '10px 16px',
+                background: '#fff3cd', borderRadius: '8px',
+                borderLeft: '4px solid #ffc107',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: '8px'
+              }}>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>
+                  {selectedTaskIds.length} task{selectedTaskIds.length !== 1 ? 's' : ''} selected
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setSelectedTaskIds([])}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    style={{ background: '#dc3545', color: '#fff', border: 'none' }}
+                  >
+                    <i className="bi bi-trash" style={{ marginRight: '4px' }}></i>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+
             {(() => {
-              const totalPages = Math.ceil(tasks.length / tasksPerPage);
+              // Apply text search filter
+              const filteredTasks = searchQuery.trim()
+                ? tasks.filter(t => {
+                    const q = searchQuery.toLowerCase();
+                    return (t.task_code || '').toLowerCase().includes(q) ||
+                           (t.template_name || '').toLowerCase().includes(q) ||
+                           (t.location || '').toLowerCase().includes(q) ||
+                           (t.assigned_to_names || []).some(n => n.toLowerCase().includes(q));
+                  })
+                : tasks;
+
+              const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
               const startIndex = (currentPage - 1) * tasksPerPage;
               const endIndex = startIndex + tasksPerPage;
-              const currentTasks = tasks.slice(startIndex, endIndex);
-              const startTask = tasks.length > 0 ? startIndex + 1 : 0;
-              const endTask = Math.min(endIndex, tasks.length);
+              const currentTasks = filteredTasks.slice(startIndex, endIndex);
+              const startTask = filteredTasks.length > 0 ? startIndex + 1 : 0;
+              const endTask = Math.min(endIndex, filteredTasks.length);
 
               return (
                 <>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid #ddd' }}>
+                        {isSuperAdmin() && (
+                          <th style={{ padding: '10px', textAlign: 'center', width: '40px' }}>
+                            <input
+                              type="checkbox"
+                              checked={currentTasks.length > 0 && currentTasks.every(t => selectedTaskIds.includes(t.id))}
+                              onChange={() => toggleSelectAll(filteredTasks)}
+                              title="Select all on this page"
+                              style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            />
+                          </th>
+                        )}
                         <th style={{ padding: '10px', textAlign: 'left' }}>Task Code</th>
-                        <th style={{ padding: '10px', textAlign: 'left' }}>Template</th>
+                        <th style={{ padding: '10px', textAlign: 'left' }}>Task Name</th>
                         <th style={{ padding: '10px', textAlign: 'left' }}>Type</th>
                         <th style={{ padding: '10px', textAlign: 'left' }}>Location</th>
                         <th style={{ padding: '10px', textAlign: 'left' }}>Assigned To</th>
@@ -464,15 +630,26 @@ function Tasks() {
                                              task.hours_worked > task.budgeted_hours && 
                                              task.status !== 'completed';
                         
+                        const isSelected = selectedTaskIds.includes(task.id);
                         return (
-                        <tr 
-                          key={task.id} 
-                          style={{ 
+                        <tr
+                          key={task.id}
+                          style={{
                             borderBottom: '1px solid #eee',
-                            backgroundColor: isFlagged ? '#fff3cd' : 'transparent',
+                            backgroundColor: isSelected ? '#e3f2fd' : (isFlagged ? '#fff3cd' : 'transparent'),
                             borderLeft: isFlagged ? '4px solid #ffc107' : 'none'
                           }}
                         >
+                          {isSuperAdmin() && (
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleTaskSelection(task.id)}
+                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                              />
+                            </td>
+                          )}
                           <td data-label="Task Code" style={{ padding: '10px' }}>
                             {task.task_code}
                             {isFlagged && (
@@ -489,7 +666,7 @@ function Tasks() {
                               </span>
                             )}
                           </td>
-                          <td data-label="Template" style={{ padding: '10px' }}>{task.template_name || 'N/A'}</td>
+                          <td data-label="Task Name" style={{ padding: '10px' }}>{task.template_name || 'N/A'}</td>
                           <td data-label="Type" style={{ padding: '10px' }}>
                             <span className={`task-badge ${task.task_type}`} style={{ fontSize: '11px', padding: '4px 8px' }}>{task.task_type}</span>
                           </td>
@@ -551,7 +728,7 @@ function Tasks() {
                             {task.scheduled_date ? new Date(task.scheduled_date).toLocaleDateString() : 'N/A'}
                           </td>
                           <td data-label="Action" style={{ padding: '10px' }}>
-                            <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-primary" style={{ padding: '4px 10px', fontSize: '12px', width: 'auto', minWidth: 'auto' }}>
+                            <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-primary" style={{ width: 'auto', minWidth: 'auto' }}>
                               View
                             </Link>
                           </td>

@@ -57,7 +57,9 @@ function mapTaskDataToTemplate(task, checklistResponse, images = []) {
       code: task.template_code || 'N/A',
       description: task.template_description || 'N/A',
       // "Last revision date" is a template-level value (manual, not per task)
-      last_revision_date: metadata.last_revision_date ? formatDate(metadata.last_revision_date) : ''
+      last_revision_date: metadata.last_revision_date ? formatDate(metadata.last_revision_date) : '',
+      checklist_made_by: metadata.checklist_made_by || '',
+      last_revision_approved_by: metadata.last_revision_approved_by || ''
     },
 
     // Checklist Sections with Responses

@@ -200,6 +200,13 @@ function Dashboard() {
     total: 0
   });
   const [todayActivities, setTodayActivities] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Live clock - update every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Wait for AuthContext to finish loading before checking organization context
@@ -211,12 +218,13 @@ function Dashboard() {
     if (hasOrganizationContext(user)) {
       loadDashboardData();
       loadCompanyLogo();
-      
-      // Auto-refresh dashboard data every 30 seconds
+
+      // Auto-refresh dashboard data and logo every 30 seconds
       const refreshInterval = setInterval(() => {
         loadDashboardData();
+        loadCompanyLogo(); // Also refresh logo in case branding was updated
       }, 30000); // 30 seconds
-      
+
       return () => clearInterval(refreshInterval);
     } else {
       // System owner without company: show empty dashboard
@@ -232,55 +240,100 @@ function Dashboard() {
   }, [pmPeriod, user, authLoading]);
 
   /**
-   * Load company logo dynamically for the selected organization
-   * 
-   * UNIVERSAL IMPLEMENTATION: Works for ALL companies automatically
-   * - Logo path: /uploads/companies/{organizationSlug}/logos/logo.png
-   * - CSS class "dashboard-logo" automatically applies animation
-   * - No company-specific code needed
-   * 
-   * See: server/docs/LOGO_ANIMATION_IMPLEMENTATION.md for documentation
+   * Build base URL for static files (uploads). Logo and other files are served at
+   * /uploads/..., not under /api, so we must use origin without /api.
+   */
+  const getUploadsBaseUrl = () => {
+    const apiBase = getApiBaseUrl();
+    return apiBase.replace(/\/api\/?$/, '') || apiBase;
+  };
+
+  /**
+   * Load company logo from organization branding (database)
+   *
+   * - Fetches logo_url from organization_branding table
+   * - Uses uploads base URL (no /api) so /uploads/... resolves correctly
+   * - Falls back to default file path only if logo_url not set or image fails
+   * - Cache-bust with updated_at so changes/removals show immediately
    */
   const loadCompanyLogo = async () => {
     try {
       // Check if user has organization context
       if (!hasOrganizationContext(user)) {
-        // System owner without company: no logo
-        setCompanyLogo(null);
-        return;
-      }
-      
-      // Get organization slug (works for ANY company)
-      const organizationSlug = getCurrentOrganizationSlug(user);
-      
-      if (!organizationSlug) {
-        // No slug found, no logo
         setCompanyLogo(null);
         return;
       }
 
-      // Construct logo URL
-      // getApiBaseUrl() returns something like "http://localhost:3001/api"
-      // But uploads route is at "/uploads/..." (not "/api/uploads/...")
-      // So we need to remove "/api" from the base URL
-      const apiBaseUrl = getApiBaseUrl();
-      const baseUrl = apiBaseUrl.replace('/api', '');
+      const uploadsBase = getUploadsBaseUrl();
+
+      // Fetch branding from database (includes logo_url, updated_at)
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/organizations/current/branding`, {
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const branding = await response.json();
+          
+          // Branding row exists and has explicit logo_url: use it (with cache-busting)
+          if (branding && branding.logo_url) {
+            const path = branding.logo_url.startsWith('http')
+              ? branding.logo_url
+              : `${uploadsBase}${branding.logo_url.startsWith('/') ? branding.logo_url : '/' + branding.logo_url}`;
+            const t = branding.updated_at ? new Date(branding.updated_at).getTime() : Date.now();
+            const logoUrl = path + (path.includes('?') ? `&t=${t}` : `?t=${t}`);
+            
+            const img = new Image();
+            img.onload = () => setCompanyLogo(logoUrl);
+            img.onerror = () => loadDefaultLogo();
+            img.src = logoUrl;
+            return;
+          }
+          
+          // Branding row exists but logo_url is empty (e.g. legacy data):
+          // fall back to default company logo file if it exists
+          await loadDefaultLogo();
+          return;
+        }
+      } catch (brandingError) {
+        console.error('Error fetching branding:', brandingError);
+      }
+
+      // No branding or fetch failed: try default file path (e.g. first-time, no logo set yet)
+      loadDefaultLogo();
+    } catch (error) {
+      console.error('Error loading company logo:', error);
+      setCompanyLogo(null);
+    }
+  };
+
+  /**
+   * Load default logo from file system
+   * Used as fallback when logo_url not set in database
+   */
+  const loadDefaultLogo = async () => {
+    try {
+      const organizationSlug = getCurrentOrganizationSlug(user);
+
+      if (!organizationSlug) {
+        setCompanyLogo(null);
+        return;
+      }
+
+      const baseUrl = getUploadsBaseUrl();
       const logoUrl = `${baseUrl}/uploads/companies/${organizationSlug}/logos/logo.png`;
-      
-      // Test if logo exists by trying to load it
+
+      // Test if default logo exists
       const img = new Image();
       img.onload = () => {
-        // Logo loaded successfully - CSS class "dashboard-logo" will apply animation automatically
         setCompanyLogo(logoUrl);
       };
       img.onerror = () => {
-        // Company logo doesn't exist, don't show any logo
         setCompanyLogo(null);
       };
       img.src = logoUrl;
     } catch (error) {
-      console.error('Error loading company logo:', error);
-      // On error, don't show any logo
+      console.error('Error loading default logo:', error);
       setCompanyLogo(null);
     }
   };
@@ -937,6 +990,13 @@ function Dashboard() {
           <div className="dashboard-card daily-activities-card">
             <div className="card-header">
               <h3>Today's Activities</h3>
+              <span className="today-datetime-inline">
+                {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                {' \u00B7 '}
+                {currentTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                {' '}
+                {currentTime.getHours() < 12 ? 'AM' : 'PM'}
+              </span>
             </div>
             <div className="daily-activities-list">
               {todayActivities.length === 0 ? (

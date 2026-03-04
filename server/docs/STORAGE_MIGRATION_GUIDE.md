@@ -2,7 +2,7 @@
 
 ## Overview
 
-SPHAiRPlatform has been updated to use **company name-based folders** (slugs) instead of organization UUIDs. This makes folder management easier, more secure, and better organized.
+SPHAiRDigital has been updated to use **company name-based folders** (slugs) instead of organization UUIDs. This makes folder management easier, more secure, and better organized.
 
 ## What Changed
 

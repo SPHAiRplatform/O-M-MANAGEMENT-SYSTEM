@@ -1,6 +1,6 @@
 /**
  * Secure Update Utility
- * Handles remote updates for SPHAiRPlatform
+ * Handles remote updates for SPHAiRDigital
  */
 
 const crypto = require('crypto');

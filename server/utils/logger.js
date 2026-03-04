@@ -20,6 +20,30 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+// #region agent log
+fetch('http://127.0.0.1:7313/ingest/c5746654-2a7b-4acb-bbb4-39f42c9032ba', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Debug-Session-Id': '77165b'
+  },
+  body: JSON.stringify({
+    sessionId: '77165b',
+    runId: 'pre-fix',
+    hypothesisId: 'H1',
+    location: 'server/utils/logger.js:logsDir-init',
+    message: 'Logger initialized and logs directory checked',
+    data: {
+      nodeEnv: process.env.NODE_ENV || 'undefined',
+      isProductionEnv: process.env.NODE_ENV === 'production',
+      logsDir,
+      logsDirExists: fs.existsSync(logsDir)
+    },
+    timestamp: Date.now()
+  })
+}).catch(() => {});
+// #endregion
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Define log levels
@@ -98,28 +122,58 @@ function sanitizeObject(obj) {
   return sanitized;
 }
 
-// Create file transports for production
-const fileTransports = [
-  // Error log file
-  new DailyRotateFile({
-    filename: path.join(logsDir, 'error-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    level: 'error',
-    maxSize: '20m',
-    maxFiles: '30d', // Keep 30 days of error logs
-    format: logFormat,
-    zippedArchive: true
-  }),
-  // Combined log file
-  new DailyRotateFile({
-    filename: path.join(logsDir, 'combined-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxSize: '20m',
-    maxFiles: '30d', // Keep 30 days of logs
-    format: logFormat,
-    zippedArchive: true
+// Create file transports only in production so file-stream-rotator is never used in development
+// (constructing DailyRotateFile calls getStream() which can open files asynchronously and emit
+// unhandled 'error' if the logs directory is missing or inaccessible, crashing the process)
+function buildFileTransports() {
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  return [
+    new DailyRotateFile({
+      filename: path.join(logsDir, 'error-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      level: 'error',
+      maxSize: '20m',
+      maxFiles: '30d',
+      format: logFormat,
+      zippedArchive: true
+    }),
+    new DailyRotateFile({
+      filename: path.join(logsDir, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '30d',
+      format: logFormat,
+      zippedArchive: true
+    })
+  ];
+}
+
+const fileTransports = isProduction ? buildFileTransports() : [];
+
+// #region agent log
+fetch('http://127.0.0.1:7313/ingest/c5746654-2a7b-4acb-bbb4-39f42c9032ba', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Debug-Session-Id': '77165b'
+  },
+  body: JSON.stringify({
+    sessionId: '77165b',
+    runId: 'post-fix',
+    hypothesisId: 'H2',
+    location: 'server/utils/logger.js:fileTransports-init',
+    message: 'File transports conditional',
+    data: {
+      nodeEnv: process.env.NODE_ENV || 'undefined',
+      isProductionEnv: isProduction,
+      fileTransportCount: fileTransports.length
+    },
+    timestamp: Date.now()
   })
-];
+}).catch(() => {});
+// #endregion
 
 // Create logger instance
 const logger = winston.createLogger({
@@ -127,7 +181,7 @@ const logger = winston.createLogger({
   level: isProduction ? 'info' : 'debug', // Only info+ in production
   format: logFormat,
   transports: [
-    ...(isProduction ? fileTransports : []), // File logs only in production
+    ...fileTransports,
     new winston.transports.Console({
       format: isProduction ? logFormat : consoleFormat,
       level: isProduction ? 'info' : 'debug'

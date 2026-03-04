@@ -2,17 +2,31 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { requireAuth } = require('../middleware/auth');
 const nodemailer = require('nodemailer');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
 
   // Validation rules
   const feedbackValidation = [
-    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
     body('subject').isIn(['question', 'bug', 'feature', 'improvement', 'other']).withMessage('Valid subject is required'),
     body('message').trim().isLength({ min: 10, max: 2000 }).withMessage('Message must be between 10 and 2000 characters'),
     body('page_url').optional().isString().trim(),
   ];
+
+  // Get the Contact Developer email (any authenticated user)
+  router.get('/contact-email', requireAuth, async (req, res) => {
+    try {
+      const db = getDb(req, pool);
+      const result = await db.query(
+        `SELECT setting_value FROM platform_settings WHERE setting_key = 'feedback_contact_email' AND setting_value IS NOT NULL AND setting_value != ''`
+      );
+      res.json({ contact_email: result.rows[0]?.setting_value || '' });
+    } catch (_) {
+      res.json({ contact_email: '' });
+    }
+  });
 
   // Submit feedback
   router.post('/', requireAuth, feedbackValidation, async (req, res) => {
@@ -22,28 +36,32 @@ module.exports = (pool) => {
         return res.status(400).json({ error: errors.array()[0].msg });
       }
 
-      const { email, subject, message, page_url } = req.body;
+      const { subject, message, page_url } = req.body;
       const userId = req.session.userId;
+      const db = getDb(req, pool);
 
-      // Get user name if user_id is provided
+      // Look up user info from DB (name + registered email)
       let userName = 'User';
+      let userEmail = req.body.email || '';
       if (userId) {
         try {
-          const userResult = await pool.query('SELECT full_name, username FROM users WHERE id = $1', [userId]);
+          const userResult = await db.query('SELECT full_name, username, email FROM users WHERE id = $1', [userId]);
           if (userResult.rows.length > 0) {
-            userName = userResult.rows[0].full_name || userResult.rows[0].username || 'User';
+            const u = userResult.rows[0];
+            userName = u.full_name || u.username || 'User';
+            userEmail = u.email || u.username || userEmail;
           }
         } catch (err) {
-          console.error('Error fetching user name:', err);
+          console.error('Error fetching user info:', err);
         }
       }
 
       // Save to database
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO feedback_submissions (user_id, name, email, subject, message, page_url, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'new')
          RETURNING id, created_at`,
-        [userId, userName, email, subject, message, page_url || null]
+        [userId, userName, userEmail, subject, message, page_url || null]
       );
 
       const feedbackId = result.rows[0].id;
@@ -51,6 +69,20 @@ module.exports = (pool) => {
       // Send email notification (if email is configured)
       try {
         if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+          let toEmail = process.env.SMTP_USER;
+          try {
+            const settingsRow = await db.query(
+              `SELECT setting_value FROM platform_settings WHERE setting_key = 'feedback_contact_email' AND setting_value IS NOT NULL AND setting_value != '' LIMIT 1`
+            );
+            if (settingsRow.rows[0]?.setting_value) {
+              toEmail = settingsRow.rows[0].setting_value.trim();
+            } else if (process.env.FEEDBACK_EMAIL) {
+              toEmail = process.env.FEEDBACK_EMAIL;
+            }
+          } catch (_) {
+            if (process.env.FEEDBACK_EMAIL) toEmail = process.env.FEEDBACK_EMAIL;
+          }
+
           const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT || '587'),
@@ -71,14 +103,14 @@ module.exports = (pool) => {
 
           await transporter.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            to: process.env.FEEDBACK_EMAIL || process.env.SMTP_USER,
-            subject: `[SPHAiR Feedback] ${subjectLabels[subject] || subject} - ${userName}`,
+            replyTo: userEmail || undefined,
+            to: toEmail,
+            subject: `[SPHAiRDigital Feedback] ${subjectLabels[subject] || subject} - ${userName}`,
             html: `
               <h2>New Feedback Submission</h2>
-              <p><strong>From:</strong> ${userName} (${email})</p>
+              <p><strong>From:</strong> ${userName} (${userEmail})</p>
               <p><strong>Subject:</strong> ${subjectLabels[subject] || subject}</p>
               <p><strong>Page:</strong> ${page_url || 'Unknown'}</p>
-              <p><strong>User ID:</strong> ${userId || 'N/A'}</p>
               <p><strong>Feedback ID:</strong> ${feedbackId}</p>
               <hr>
               <p><strong>Message:</strong></p>

@@ -1,14 +1,14 @@
-# SPHAiR Platform - Configuration Options Guide
+# SPHAiR Digital - Configuration Options Guide
 
 **Version:** 1.0  
 **Last Updated:** January 2026  
-**Purpose:** Document all per-company configuration options available in SPHAiR Platform
+**Purpose:** Document all per-company configuration options available in SPHAiR Digital
 
 ---
 
 ## Overview
 
-SPHAiR Platform uses a **configuration-driven architecture** where companies can customize their experience without changing core features. All configuration is stored in three main tables:
+SPHAiR Digital uses a **configuration-driven architecture** where companies can customize their experience without changing core features. All configuration is stored in three main tables:
 
 1. **`organization_settings`** - Flexible key-value settings (JSONB)
 2. **`organization_features`** - Feature flags and module enablement

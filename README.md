@@ -1,12 +1,12 @@
-# SPHAiRPlatform
+# SPHAiRDigital
 
 **One Platform. Every Task.**
 
-SPHAiRPlatform is a **multi-tenant SaaS platform** that hosts multiple companies, each with their own isolated data and customizable configurations. It is a professional, centralized digital O&M system designed to optimize solar power plant maintenance operations. The platform is asset-centric, user-friendly, backend-validated, and fully auditable, providing complete control, efficiency, and visibility over all maintenance and operational workflows.
+SPHAiRDigital is a **multi-tenant SaaS platform** that hosts multiple companies, each with their own isolated data and customizable configurations. It is a professional, centralized digital O&M system designed to optimize solar power plant maintenance operations. The platform is asset-centric, user-friendly, backend-validated, and fully auditable, providing complete control, efficiency, and visibility over all maintenance and operational workflows.
 
 ## Platform Architecture
 
-**SPHAiRPlatform is a platform that hosts companies.**
+**SPHAiRDigital is a platform that hosts companies.**
 
 ### Route Structure
 
@@ -96,9 +96,9 @@ When system owners log in, they see the **Platform Dashboard** (`/platform/dashb
   - Cannot access other organizations' data
   - Secure data isolation maintained
 
-## About SPHAiRPlatform
+## About SPHAiRDigital
 
-SPHAiRPlatform is the name of the whole platform we are building. It hosts multiple companies, each with their own isolated data and configurations. Companies that subscribe to SPHAiRPlatform may customize the branding to their company name (e.g., "SIE Management System").
+SPHAiRDigital is the name of the whole platform we are building. It hosts multiple companies, each with their own isolated data and configurations. Companies that subscribe to SPHAiRDigital may customize the branding to their company name (e.g., "SIE Management System").
 
 ## Overview
 
@@ -116,7 +116,7 @@ The primary purpose of this system is to:
 
 ## Offline Functionality
 
-SPHAiRPlatform includes comprehensive offline support, allowing users to continue working even when internet connectivity is unavailable. When the device reconnects to the internet, all offline operations are automatically synchronized with the server.
+SPHAiRDigital includes comprehensive offline support, allowing users to continue working even when internet connectivity is unavailable. When the device reconnects to the internet, all offline operations are automatically synchronized with the server.
 
 ### Key Features
 
@@ -293,7 +293,7 @@ The system displays a status indicator at the top of the screen showing:
 
 ## Deployment
 
-SPHAiRPlatform supports secure, automated deployment with:
+SPHAiRDigital supports secure, automated deployment with:
 
 - **Docker Deployment**: Containerized deployment with Docker Compose
 - **Secure Update Mechanism**: Authenticated remote updates (requires service token)
@@ -401,13 +401,13 @@ ChecksheetsApp/
 
 ## Marketing Website
 
-SPHAiRPlatform includes a professional marketing website located in the `Sphair/` folder. This static website serves as the public-facing marketing site for the platform.
+SPHAiRDigital includes a professional marketing website located in the `Sphair/` folder. This static website serves as the public-facing marketing site for the platform.
 
 ### Website Structure
 
 - **Domain Structure**:
-  - `sphairplatform.com` → Marketing website (Sphair folder)
-  - `sphairplatform.com/app` → Actual software application
+  - `sphairdigital.com` → Marketing website (Sphair folder)
+  - `sphairdigital.com/app` → Actual software application
 
 ### Pages
 
@@ -468,7 +468,7 @@ For more details, see [Sphair/README.md](./Sphair/README.md).
 
 **Important: Multi-Tenant Template System**
 
-SPHAiRPlatform uses a **multi-tenant architecture** where **each company (organization) has its own set of checklist templates**. There are **NO shared system templates** - each organization manages and owns their templates independently.
+SPHAiRDigital uses a **multi-tenant architecture** where **each company (organization) has its own set of checklist templates**. There are **NO shared system templates** - each organization manages and owns their templates independently.
 
 ### Template Ownership
 
@@ -546,7 +546,7 @@ When a PM task is completed with `overall_status = 'fail'`:
 
 ### Single-Device-Per-Session
 
-SPHAiRPlatform implements **single-device-per-session** security to enhance application security and maintain accountability:
+SPHAiRDigital implements **single-device-per-session** security to enhance application security and maintain accountability:
 
 - **One Active Session**: Each user can only have one active session at a time across all devices
 - **Automatic Session Invalidation**: When a user logs in from a new device, the previous session is automatically invalidated
@@ -565,7 +565,7 @@ SPHAiRPlatform implements **single-device-per-session** security to enhance appl
 
 ### Two-Tier Inactivity Timeout
 
-SPHAiRPlatform implements an intelligent inactivity timeout system:
+SPHAiRDigital implements an intelligent inactivity timeout system:
 
 - **Work-Active Timeout (2-4 hours)**: Extended timeout applies when:
   - User has active tasks (`in_progress` or `paused` status)
@@ -793,7 +793,7 @@ Templates are stored with their complete structure in JSONB format, making them 
 
 ## Role-Based Access Control (RBAC)
 
-SPHAiRPlatform uses a comprehensive RBAC system with six defined roles:
+SPHAiRDigital uses a comprehensive RBAC system with six defined roles:
 
 ### System Owner
 - Full system control and access to all features
@@ -841,7 +841,7 @@ Access is defined by permissions (e.g., `templates:create`, `templates:update`, 
 
 ### Rate Limiting
 
-SPHAiRPlatform implements comprehensive rate limiting to protect against brute force attacks and API abuse:
+SPHAiRDigital implements comprehensive rate limiting to protect against brute force attacks and API abuse:
 
 - **Standard API Endpoints**: 100 requests per 15 minutes per IP/user
 - **Authentication Endpoints**: 5 login attempts per 15 minutes per IP

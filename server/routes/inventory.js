@@ -5,11 +5,13 @@ const fs = require('fs');
 const path = require('path');
 const { parseInventoryFromExcel, updateActualQtyInExcel, updateInventoryItemInExcel, exportInventoryToExcel, DEFAULT_INVENTORY_XLSX } = require('../utils/inventoryExcelSync');
 const { v4: uuidv4 } = require('uuid');
-const { 
-  getOrganizationSlugFromRequest, 
-  getStoragePath, 
+const {
+  getOrganizationSlugFromRequest,
+  getStoragePath,
   ensureCompanyDirs
 } = require('../utils/organizationStorage');
+const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
+const { getDb } = require('../middleware/tenantContext');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -23,7 +25,7 @@ module.exports = (pool) => {
   let lastSyncedMtimeMs = null;
   let syncInFlight = null;
 
-  async function syncInventoryFromExcel() {
+  async function syncInventoryFromExcel(organizationId) {
     const parsed = await parseInventoryFromExcel();
     const items = parsed.items || [];
 
@@ -47,8 +49,8 @@ module.exports = (pool) => {
       }
 
       await pool.query(
-        `INSERT INTO inventory_items (section, item_code, item_description, part_type, min_level, actual_qty)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO inventory_items (section, item_code, item_description, part_type, min_level, actual_qty, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (item_code) DO UPDATE SET
            section = EXCLUDED.section,
            item_description = EXCLUDED.item_description,
@@ -57,7 +59,7 @@ module.exports = (pool) => {
            -- IMPORTANT: actual_qty stays in sync with Excel as the "source"
            actual_qty = EXCLUDED.actual_qty,
            updated_at = CURRENT_TIMESTAMP`,
-        [item.section || null, item.item_code, item.item_description || null, item.part_type || null, item.min_level || 0, item.actual_qty || 0]
+        [item.section || null, item.item_code, item.item_description || null, item.part_type || null, item.min_level || 0, item.actual_qty || 0, organizationId]
       );
       upserts++;
     }
@@ -69,7 +71,7 @@ module.exports = (pool) => {
     return { message: 'Imported inventory from Excel', items: upserts, file: parsed.filePath };
   }
 
-  async function ensureInventorySyncedIfNeeded() {
+  async function ensureInventorySyncedIfNeeded(organizationId) {
     // Default: enabled (user requested automatic sync). Can be disabled via env if ever needed.
     const enabled = String(process.env.INVENTORY_AUTO_SYNC ?? 'true').toLowerCase() !== 'false';
     if (!enabled) return;
@@ -88,7 +90,7 @@ module.exports = (pool) => {
     if (!syncInFlight) {
       syncInFlight = (async () => {
         try {
-          await syncInventoryFromExcel();
+          await syncInventoryFromExcel(organizationId);
           lastSyncedMtimeMs = mtimeMs;
         } finally {
           syncInFlight = null;
@@ -110,7 +112,7 @@ module.exports = (pool) => {
       
       // Wrap sync in try-catch to prevent it from breaking the entire endpoint
       try {
-        await ensureInventorySyncedIfNeeded();
+        await ensureInventorySyncedIfNeeded(getOrganizationIdFromRequest(req));
       } catch (syncError) {
         console.error('[INVENTORY] Error syncing from Excel (non-fatal):', syncError.message);
         // Continue even if sync fails - use existing DB data
@@ -142,8 +144,6 @@ module.exports = (pool) => {
         paramCount++;
       }
 
-      // Use req.db if available (has tenant context), otherwise fall back to pool
-      const { getDb } = require('../middleware/tenantContext');
       const db = getDb(req, pool);
       const result = await db.query(
         `SELECT * FROM inventory_items ${where} ORDER BY section NULLS LAST, item_code`,
@@ -164,7 +164,7 @@ module.exports = (pool) => {
   // Import/refresh items from Excel (admin only) - kept for backward compatibility
   router.post('/import', requireAdmin, async (req, res) => {
     try {
-      const out = await syncInventoryFromExcel();
+      const out = await syncInventoryFromExcel(getOrganizationIdFromRequest(req));
       // Also update the mtime checkpoint so GET /items won't immediately re-sync.
       try {
         const stat = fs.statSync(DEFAULT_INVENTORY_XLSX);
@@ -261,9 +261,9 @@ module.exports = (pool) => {
       );
 
       await client.query(
-        `INSERT INTO inventory_transactions (item_id, tx_type, qty_change, note, created_by)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [item.id, tx_type || (delta > 0 ? 'restock' : 'adjust'), delta, note || null, req.session.userId || null]
+        `INSERT INTO inventory_transactions (item_id, tx_type, qty_change, note, created_by, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [item.id, tx_type || (delta > 0 ? 'restock' : 'adjust'), delta, note || null, req.session.userId || null, getOrganizationIdFromRequest(req)]
       );
 
       await client.query('COMMIT');
@@ -292,12 +292,13 @@ module.exports = (pool) => {
 
       await client.query('BEGIN');
 
+      const orgId = getOrganizationIdFromRequest(req);
       const slipNo = `SLIP-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
       const slipRes = await client.query(
-        `INSERT INTO inventory_slips (slip_no, task_id, created_by)
-         VALUES ($1, $2, $3)
+        `INSERT INTO inventory_slips (slip_no, task_id, created_by, organization_id)
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [slipNo, task_id, req.session.userId || null]
+        [slipNo, task_id, req.session.userId || null, orgId]
       );
       const slip = slipRes.rows[0];
 
@@ -337,9 +338,9 @@ module.exports = (pool) => {
         );
 
         await client.query(
-          `INSERT INTO inventory_transactions (item_id, task_id, slip_id, tx_type, qty_change, created_by)
-           VALUES ($1, $2, $3, 'use', $4, $5)`,
-          [item.id, task_id, slip.id, -qty, req.session.userId || null]
+          `INSERT INTO inventory_transactions (item_id, task_id, slip_id, tx_type, qty_change, created_by, organization_id)
+           VALUES ($1, $2, $3, 'use', $4, $5, $6)`,
+          [item.id, task_id, slip.id, -qty, req.session.userId || null, orgId]
         );
 
         updates[code] = newQty;
@@ -363,7 +364,8 @@ module.exports = (pool) => {
   // List slips
   router.get('/slips', requireAuth, async (req, res) => {
     try {
-      const result = await pool.query(
+      const db = getDb(req, pool);
+      const result = await db.query(
         `SELECT s.*, u.full_name as created_by_name
          FROM inventory_slips s
          LEFT JOIN users u ON s.created_by = u.id
@@ -379,9 +381,10 @@ module.exports = (pool) => {
 
   router.get('/slips/:id', requireAuth, async (req, res) => {
     try {
-      const slipRes = await pool.query('SELECT * FROM inventory_slips WHERE id = $1', [req.params.id]);
+      const db = getDb(req, pool);
+      const slipRes = await db.query('SELECT * FROM inventory_slips WHERE id = $1', [req.params.id]);
       if (slipRes.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      const linesRes = await pool.query('SELECT * FROM inventory_slip_lines WHERE slip_id = $1 ORDER BY created_at ASC', [req.params.id]);
+      const linesRes = await db.query('SELECT * FROM inventory_slip_lines WHERE slip_id = $1 ORDER BY created_at ASC', [req.params.id]);
       res.json({ slip: slipRes.rows[0], lines: linesRes.rows });
     } catch (e) {
       console.error('[INVENTORY] Error in GET /slips/:id:', e);
@@ -410,14 +413,15 @@ module.exports = (pool) => {
       }
 
       // Check if item_code already exists
-      const existing = await pool.query('SELECT id FROM inventory_items WHERE item_code = $1', [trimmedCode]);
+      const db = getDb(req, pool);
+      const existing = await db.query('SELECT id FROM inventory_items WHERE item_code = $1', [trimmedCode]);
       if (existing.rows.length > 0) {
         return res.status(400).json({ error: 'Already exists' });
       }
 
-      const result = await pool.query(
-        `INSERT INTO inventory_items (section, item_code, item_description, part_type, min_level, actual_qty)
-         VALUES ($1, $2, $3, $4, $5, $6)
+      const result = await db.query(
+        `INSERT INTO inventory_items (section, item_code, item_description, part_type, min_level, actual_qty, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
           section || null,
@@ -425,7 +429,8 @@ module.exports = (pool) => {
           item_description || null,
           part_type || null,
           min_level || 0,
-          actual_qty || 0
+          actual_qty || 0,
+          getOrganizationIdFromRequest(req)
         ]
       );
 
@@ -570,8 +575,9 @@ module.exports = (pool) => {
         dateFilter = 'WHERE t.created_at >= CURRENT_DATE - INTERVAL \'30 days\'';
       }
 
-      const result = await pool.query(
-        `SELECT 
+      const db = getDb(req, pool);
+      const result = await db.query(
+        `SELECT
           i.section,
           i.item_code,
           i.item_description,

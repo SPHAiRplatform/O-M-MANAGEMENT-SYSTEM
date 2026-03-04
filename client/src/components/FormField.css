@@ -1,0 +1,94 @@
+/* ============================================
+   FormField Component Styles
+   ============================================ */
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.form-field-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-indicator {
+  color: #ef4444;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-field-input {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #334155;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-field-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-field-input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.form-field-input::placeholder {
+  color: #94a3b8;
+}
+
+/* Error state */
+.form-field-input.has-error {
+  border-color: #ef4444;
+}
+
+.form-field-input.has-error:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* Select specific */
+select.form-field-input {
+  cursor: pointer;
+  appearance: auto;
+}
+
+/* Textarea specific */
+textarea.form-field-input {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+/* Error and hint messages */
+.form-field-error {
+  font-size: 13px;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-field-error .bi {
+  font-size: 12px;
+}
+
+.form-field-hint {
+  font-size: 13px;
+  color: #94a3b8;
+}

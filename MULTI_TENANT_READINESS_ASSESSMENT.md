@@ -1,4 +1,4 @@
-# SPHAiR Platform - Multi-Tenant Readiness Assessment
+# SPHAiR Digital - Multi-Tenant Readiness Assessment
 
 **Version:** 1.0  
 **Date:** January 2026  

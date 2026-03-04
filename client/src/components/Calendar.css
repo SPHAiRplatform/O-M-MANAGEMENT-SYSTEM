@@ -2,6 +2,8 @@
   padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .calendar-header {
@@ -85,7 +87,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,12 +114,13 @@
 
 .legend-items-horizontal {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
-  padding: 4px 10px;
-  border-radius: 16px;
+  padding: 8px 10px;
+  border-radius: 10px;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
   animation: slideInRight 0.3s ease-out;
   border: 1px solid rgba(255, 255, 255, 0.8);
@@ -160,13 +163,13 @@
 }
 
 .legend-label-compact {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   color: #2c3e50;
   letter-spacing: 0.3px;
-  min-width: 16px;
-  text-align: center;
+  text-align: left;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .calendar-month-view {
@@ -183,6 +186,8 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: relative;
   width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .month-name {
@@ -224,6 +229,7 @@
   transition: background-color 0.2s;
   background: #fafafa;
   position: relative;
+  overflow: hidden;
 }
 
 .calendar-day:hover {
@@ -336,145 +342,172 @@
   border-top: 1px solid #e0e0e0;
 }
 
-/* Mobile responsiveness */
+/* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
   .calendar-container {
-    padding: 10px;
+    padding: 8px;
+    overflow-x: hidden;
   }
 
+  /* Header: title + controls in one row */
   .calendar-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 20px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: nowrap;
   }
 
   .calendar-header h1 {
-    font-size: 2rem;
+    font-size: 1.1rem;
+    text-align: left;
     margin-bottom: 0;
+    white-space: nowrap;
   }
 
+  /* Controls: compact horizontal row */
   .calendar-controls {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 4px;
+    flex-shrink: 0;
   }
 
   .calendar-nav-btn {
-    padding: 3px 5px;
-    font-size: 9px;
-    min-height: 20px;
+    padding: 4px 8px;
+    font-size: 11px;
+    min-height: 26px;
   }
 
   .calendar-icon-btn {
-    padding: 3px 5px;
-    font-size: 10px;
-    min-width: 22px;
-    min-height: 22px;
+    padding: 4px 6px;
+    font-size: 12px;
+    min-width: 26px;
+    min-height: 26px;
   }
 
   .calendar-download-btn {
-    padding: 3px 6px;
-    font-size: 9px;
-    min-height: 22px;
-    margin-left: 4px;
+    padding: 4px 8px;
+    font-size: 10px;
+    min-height: 26px;
+    margin-left: 2px;
   }
 
   .calendar-content-wrapper {
     flex-direction: column;
-    gap: 15px;
+    gap: 10px;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .calendar-month-view {
     width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .calendar-month {
-    padding: 10px;
+    padding: 6px;
+    border-radius: 6px;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .month-name {
-    font-size: 16px;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
+    font-size: 15px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
   }
 
   .calendar-weekdays {
-    gap: 1px;
-    margin-bottom: 3px;
+    gap: 0;
+    margin-bottom: 2px;
   }
 
   .weekday-header {
-    font-size: 10px;
-    padding: 4px 2px;
+    font-size: 9px;
+    padding: 3px 0;
+    font-weight: 600;
+    text-align: center;
+    overflow: hidden;
   }
 
   .calendar-days {
-    gap: 1px;
+    gap: 0;
   }
 
   .calendar-day {
-    min-height: 70px;
-    padding: 3px;
+    min-height: 48px;
+    padding: 1px;
+    overflow: hidden;
   }
 
   .day-number {
-    font-size: 11px;
-    margin-bottom: 3px;
+    font-size: 10px;
+    margin-bottom: 1px;
+  }
+
+  .day-events {
+    gap: 1px;
+    overflow: hidden;
   }
 
   .calendar-event {
-    font-size: 8px;
-    padding: 1px 3px;
-    margin-top: 1px;
+    font-size: 6px;
+    padding: 1px 2px;
+    margin-top: 0;
+    border-radius: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
 
   .calendar-event-more {
-    font-size: 8px;
-    padding: 1px 3px;
+    font-size: 6px;
+    padding: 1px 1px;
   }
 
-  /* Legend positioning on mobile */
+  /* Legend: positioned above calendar on mobile */
   .calendar-legend-compact {
     position: relative;
     top: auto;
     right: auto;
-    margin-bottom: 10px;
-    justify-content: flex-start;
+    margin-bottom: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   .legend-trigger {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .legend-icon {
-    font-size: 8px;
+    font-size: 7px;
     padding: 0 2px;
   }
 
   .legend-items-horizontal {
-    padding: 4px 8px;
-    gap: 3px;
+    padding: 6px 8px;
+    gap: 1px;
   }
 
   .legend-item-compact {
-    padding: 1px 3px;
-    gap: 2px;
+    padding: 2px 3px;
+    gap: 3px;
   }
 
   .legend-color-compact {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
 
   .legend-label-compact {
-    font-size: 8px;
-    min-width: 14px;
+    font-size: 9px;
   }
 
-  /* Modal adjustments */
+  /* Modal */
   .calendar-modal {
     width: 95%;
     max-width: 95%;
@@ -488,7 +521,7 @@
   .calendar-modal .form-group input,
   .calendar-modal .form-group select,
   .calendar-modal .form-group textarea {
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: 14px;
   }
 
@@ -504,46 +537,68 @@
 
 @media (max-width: 480px) {
   .calendar-container {
-    padding: 8px;
+    padding: 4px;
   }
 
   .calendar-header h1 {
-    font-size: 2rem;
+    font-size: 1rem;
   }
 
   .calendar-controls {
     gap: 3px;
   }
 
-  .calendar-nav-btn,
-  .calendar-icon-btn,
-  .calendar-download-btn {
-    padding: 2px 4px;
-    font-size: 8px;
-    min-height: 18px;
+  .calendar-nav-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+    min-height: 24px;
   }
 
   .calendar-icon-btn {
-    min-width: 20px;
-    min-height: 20px;
+    padding: 3px 5px;
+    font-size: 11px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  .calendar-download-btn {
+    padding: 3px 6px;
+    font-size: 9px;
+    min-height: 24px;
+  }
+
+  .calendar-month {
+    padding: 4px;
   }
 
   .calendar-day {
-    min-height: 60px;
-    padding: 2px;
+    min-height: 40px;
+    padding: 1px;
   }
 
   .day-number {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .calendar-event {
-    font-size: 7px;
-    padding: 1px 2px;
+    font-size: 5px;
+    padding: 1px 1px;
+    line-height: 1.1;
+  }
+
+  .calendar-event-more {
+    font-size: 5px;
+    padding: 0 1px;
   }
 
   .weekday-header {
-    font-size: 9px;
-    padding: 3px 1px;
+    font-size: 8px;
+    padding: 2px 0;
+  }
+
+  .month-name {
+    font-size: 13px;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getTasks, createTask, getChecklistTemplates, getUsers } from '../api/api';
+import { getTasks, createTask, bulkDeleteTasks, getChecklistTemplates, getUsers } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
 
@@ -19,7 +19,10 @@ function Inspection() {
   const [currentPage, setCurrentPage] = useState(1);
   const [alertError, setAlertError] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
-  const tasksPerPage = 4;
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const tasksPerPage = 10;
 
   const [newTask, setNewTask] = useState({
     checklist_template_id: '',
@@ -47,6 +50,7 @@ function Inspection() {
       
       const response = await getTasks(params);
       setTasks(response.data);
+      setSelectedTaskIds([]);
       setLoading(false);
     } catch (error) {
       console.error('Error loading inspection tasks:', error);
@@ -125,6 +129,38 @@ function Inspection() {
   const currentTasks = tasks.slice(indexOfFirstTask, indexOfLastTask);
   const totalPages = Math.ceil(tasks.length / tasksPerPage);
 
+  const handleBulkDelete = async () => {
+    if (selectedTaskIds.length === 0) return;
+    setDeleting(true);
+    try {
+      const response = await bulkDeleteTasks(selectedTaskIds);
+      setAlertSuccess(response.data.message);
+      setSelectedTaskIds([]);
+      setShowDeleteConfirm(false);
+      loadTasks();
+    } catch (err) {
+      console.error('Error deleting tasks:', err);
+      setAlertError({ message: err.response?.data?.error || 'Failed to delete tasks' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleTaskSelection = (taskId) => {
+    setSelectedTaskIds(prev =>
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = currentTasks.every(t => selectedTaskIds.includes(t.id));
+    if (allSelected) {
+      setSelectedTaskIds(prev => prev.filter(id => !currentTasks.some(t => t.id === id)));
+    } else {
+      setSelectedTaskIds(prev => [...new Set([...prev, ...currentTasks.map(t => t.id)])]);
+    }
+  };
+
   return (
     <div>
       <ErrorAlert error={alertError} onClose={() => setAlertError(null)} />
@@ -133,8 +169,8 @@ function Inspection() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h2 className="page-title" style={{ marginBottom: 0 }}>Inspections</h2>
         {isAdmin() && (
-          <button className="btn btn-sm btn-primary" onClick={() => setShowCreateForm(!showCreateForm)} style={{ padding: '8px 16px', fontSize: '13px' }}>
-            {showCreateForm ? 'Cancel' : 'Create New Inspection'}
+          <button className="btn btn-sm btn-primary" onClick={() => setShowCreateForm(!showCreateForm)}>
+            {showCreateForm ? 'Cancel' : 'New Inspection'}
           </button>
         )}
       </div>
@@ -331,13 +367,71 @@ function Inspection() {
             <button
               className="btn btn-sm btn-secondary"
               onClick={() => setFilters({ status: '', task_type: '', completed_date: '' })}
-              style={{ padding: '6px 16px', fontSize: '13px' }}
             >
-              Clear Filters
+              Clear
             </button>
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '8px', padding: '24px',
+            maxWidth: '420px', width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ margin: '0 0 12px 0', color: '#dc3545' }}>
+              <i className="bi bi-exclamation-triangle-fill" style={{ marginRight: '8px' }}></i>
+              Confirm Delete
+            </h3>
+            <p style={{ margin: '0 0 8px 0', color: '#333' }}>
+              Are you sure you want to permanently delete <strong>{selectedTaskIds.length}</strong> task{selectedTaskIds.length !== 1 ? 's' : ''}?
+            </p>
+            <p style={{ margin: '0 0 20px 0', color: '#999', fontSize: '13px' }}>
+              This will also delete all associated checklist responses, assignments, and reports. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>Cancel</button>
+              <button
+                className={`btn btn-danger ${deleting ? 'btn-loading' : ''}`}
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                style={{ background: '#dc3545', color: '#fff', border: 'none' }}
+              >
+                <span>Delete {selectedTaskIds.length} Task{selectedTaskIds.length !== 1 ? 's' : ''}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selection action bar */}
+      {isSuperAdmin() && selectedTaskIds.length > 0 && (
+        <div style={{
+          marginBottom: '12px', padding: '10px 16px',
+          background: '#fff3cd', borderRadius: '8px', borderLeft: '4px solid #ffc107',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px'
+        }}>
+          <span style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>
+            {selectedTaskIds.length} task{selectedTaskIds.length !== 1 ? 's' : ''} selected
+          </span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedTaskIds([])}>Clear</button>
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={() => setShowDeleteConfirm(true)}
+              style={{ background: '#dc3545', color: '#fff', border: 'none' }}
+            >
+              <i className="bi bi-trash" style={{ marginRight: '4px' }}></i>Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tasks Table */}
       {tasks.length === 0 ? (
@@ -352,6 +446,17 @@ function Inspection() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #ddd' }}>
+                  {isSuperAdmin() && (
+                    <th style={{ padding: '10px', textAlign: 'center', width: '40px' }}>
+                      <input
+                        type="checkbox"
+                        checked={currentTasks.length > 0 && currentTasks.every(t => selectedTaskIds.includes(t.id))}
+                        onChange={toggleSelectAll}
+                        title="Select all on this page"
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                    </th>
+                  )}
                   <th style={{ padding: '10px', textAlign: 'left' }}>Task Code</th>
                   <th style={{ padding: '10px', textAlign: 'left' }}>Template</th>
                   <th style={{ padding: '10px', textAlign: 'left' }}>Type</th>
@@ -366,19 +471,30 @@ function Inspection() {
               <tbody>
                 {currentTasks.map((task) => {
                   const isFlagged = task.is_flagged;
-                  const hoursExceeded = task.budgeted_hours && task.hours_worked && 
-                                       task.hours_worked > task.budgeted_hours && 
+                  const hoursExceeded = task.budgeted_hours && task.hours_worked &&
+                                       task.hours_worked > task.budgeted_hours &&
                                        task.status !== 'completed';
-                  
+                  const isSelected = selectedTaskIds.includes(task.id);
+
                   return (
-                  <tr 
-                    key={task.id} 
-                    style={{ 
+                  <tr
+                    key={task.id}
+                    style={{
                       borderBottom: '1px solid #eee',
-                      backgroundColor: isFlagged ? '#fff3cd' : 'transparent',
+                      backgroundColor: isSelected ? '#e3f2fd' : (isFlagged ? '#fff3cd' : 'transparent'),
                       borderLeft: isFlagged ? '4px solid #ffc107' : 'none'
                     }}
                   >
+                    {isSuperAdmin() && (
+                      <td style={{ padding: '10px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTaskSelection(task.id)}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                        />
+                      </td>
+                    )}
                     <td data-label="Task Code" style={{ padding: '10px' }}>
                       {task.task_code}
                       {isFlagged && (
@@ -448,7 +564,7 @@ function Inspection() {
                       {task.scheduled_date ? new Date(task.scheduled_date).toLocaleDateString() : 'N/A'}
                     </td>
                     <td data-label="Action" style={{ padding: '10px' }}>
-                      <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }}>
+                      <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-primary">
                         View
                       </Link>
                     </td>

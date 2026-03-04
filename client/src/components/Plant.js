@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getPlantMapStructure, savePlantMapStructure, submitTrackerStatusRequest, getCycleInfo, resetCycle } from '../api/api';
+import { getPlantMapStructure, savePlantMapStructure, submitTrackerStatusRequest, getCycleInfo, resetCycle, clearCycleToZero } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { generatePlantMapReport } from '../utils/plantMapReport';
 import { ErrorAlert, SuccessAlert, InfoAlert } from './ErrorAlert';
+import { ConfirmDialog } from './ConfirmDialog';
+import SitemapBuilder from './SitemapBuilder';
 import './Plant.css';
 
 // Correct cabinet mapping: 24 cabinets total
@@ -20,7 +22,7 @@ const getCorrectCabinet = (trackerId) => {
 const TrackerBlock = React.memo(({ tracker, bounds, viewMode, isSelected, onSelect, selectionMode }) => {
   const x = (tracker.col - bounds.minCol) * 28;
   const y = (tracker.row - bounds.minRow) * 28;
-  const isSiteOffice = tracker.id === 'SITE_OFFICE';
+  const isSiteOffice = tracker.id.startsWith('SITE_OFFICE');
   const bgColor = isSiteOffice 
     ? '#4169E1' 
     : (viewMode === 'grass_cutting' 
@@ -138,6 +140,8 @@ function Plant() {
   const saveTimeoutRef = useRef(null);
   const hasLoadedRef = useRef(false);
   const mapContainerRef = useRef(null);
+  const mapScrollRef = useRef(null);
+  const [mapScale, setMapScale] = useState(1);
   const [downloading, setDownloading] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(null);
   const [cycleLoading, setCycleLoading] = useState(false);
@@ -145,6 +149,13 @@ function Plant() {
   const [alertError, setAlertError] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [builderMode, setBuilderMode] = useState(false);
+  // Custom labels per organization (stored in map-structure.json)
+  const [plantLabels, setPlantLabels] = useState({
+    trackerName: 'Trackers',
+    cycleName: 'Cycle'
+  });
   const siteMapName = 'Site Map'; // Always "Site Map" for all organizations
   const location = useLocation();
   const lastLocationRef = useRef(null);
@@ -205,6 +216,10 @@ function Plant() {
             structure = result.structure;
             serverHasData = true;
             console.log('[PLANT] Loaded structure from company folder:', structure.length, 'trackers');
+            // Load custom labels if present
+            if (result.labels) {
+              setPlantLabels(prev => ({ ...prev, ...result.labels }));
+            }
           } else {
             // Server returned empty array - company has no map data
             serverHasData = false;
@@ -227,12 +242,12 @@ function Plant() {
       if (structure && structure.length > 0) {
         // Filter: keep only M## trackers and SITE_OFFICE, remove roads
         const filtered = structure.filter(t => 
-          (t.id && t.id.startsWith('M') && /^M\d{2}$/.test(t.id)) || t.id === 'SITE_OFFICE'
+          (t.id && t.id.startsWith('M') && /^M\d{2}$/.test(t.id)) || t.id.startsWith('SITE_OFFICE')
         );
         
         // Fix CT numbers
         const fixed = filtered.map(t => {
-          if (t.id === 'SITE_OFFICE') return t;
+          if (t.id.startsWith('SITE_OFFICE')) return t;
           const correctCT = getCorrectCabinet(t.id);
           return correctCT ? { ...t, cabinet: correctCT } : t;
         });
@@ -367,7 +382,7 @@ function Plant() {
 
   // Handle multi-select (works for both desktop and mobile)
   const handleTrackerSelect = useCallback((tracker) => {
-    if (tracker.id === 'SITE_OFFICE') return;
+    if (tracker.id.startsWith('SITE_OFFICE')) return;
     if (!selectionMode) return; // Only allow selection when in selection mode
     
     // Check if tracker is already done (green) - should not be selectable
@@ -465,9 +480,25 @@ function Plant() {
   const mapWidth = useMemo(() => (bounds.maxCol - bounds.minCol) * 28 + 10, [bounds]);
   const mapHeight = useMemo(() => (bounds.maxRow - bounds.minRow) * 28 + 10, [bounds]);
 
+  // Auto-scale map to fit container on mobile
+  useEffect(() => {
+    const calcScale = () => {
+      if (!mapScrollRef.current || mapWidth <= 0) return;
+      const containerWidth = mapScrollRef.current.clientWidth - 16; // padding
+      if (containerWidth < mapWidth) {
+        setMapScale(Math.max(0.3, containerWidth / mapWidth));
+      } else {
+        setMapScale(1);
+      }
+    };
+    calcScale();
+    window.addEventListener('resize', calcScale);
+    return () => window.removeEventListener('resize', calcScale);
+  }, [mapWidth]);
+
   // Calculate progress and statistics for current view mode
   const progress = useMemo(() => {
-    const allTrackers = trackers.filter(t => t.id !== 'SITE_OFFICE');
+    const allTrackers = trackers.filter(t => !t.id.startsWith('SITE_OFFICE'));
     if (allTrackers.length === 0) return 0;
     
     const doneCount = allTrackers.filter(t => {
@@ -513,60 +544,86 @@ function Plant() {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to reset the ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} cycle?\n\nThis will:\n- Complete the current cycle\n- Start a new cycle\n- Reset all tracker colors to white\n\nThis action cannot be undone.`)) {
-      return;
-    }
-
-    setResettingCycle(true);
-    try {
-      const result = await resetCycle(viewMode);
-      console.log('[PLANT] Cycle reset result:', result);
-      
-      // Reset the loaded flag to force a fresh reload
-      hasLoadedRef.current = false;
-      
-      // Reload cycle info
-      const cycleData = await getCycleInfo(viewMode);
-      setCurrentCycle(cycleData);
-      
-      // Force reload map structure with delay to ensure backend has saved
-      // Use longer delay and add cache-busting to ensure fresh data
-      setTimeout(async () => {
+    setConfirmDialog({
+      title: `Reset ${plantLabels.cycleName}`,
+      message: `Are you sure you want to reset the ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} ${plantLabels.cycleName.toLowerCase()}?\n\nThis will:\n- Complete the current ${plantLabels.cycleName.toLowerCase()}\n- Start a new ${plantLabels.cycleName.toLowerCase()}\n- Reset all ${plantLabels.trackerName.toLowerCase()} colors to white\n\nThis action cannot be undone.`,
+      confirmLabel: 'Reset',
+      variant: 'danger',
+      onConfirm: async () => {
+        setResettingCycle(true);
         try {
-          console.log('[PLANT] Reloading map structure after cycle reset...');
-          // Force reload by resetting flag and calling loadMapStructure
+          const result = await resetCycle(viewMode);
+          console.log('[PLANT] Cycle reset result:', result);
+
+          // Reset the loaded flag to force a fresh reload
           hasLoadedRef.current = false;
-          
-          // Add a small cache-busting delay and reload
-          await new Promise(resolve => setTimeout(resolve, 300));
-          await loadMapStructure(true);
-          
-          // Verify the reload worked by checking tracker colors
-          console.log('[PLANT] Map structure reloaded after cycle reset');
-          
-          // Double-check: reload again after another short delay to ensure consistency
+
+          // Reload cycle info
+          const cycleData = await getCycleInfo(viewMode);
+          setCurrentCycle(cycleData);
+
+          // Force reload map structure with delay to ensure backend has saved
+          // Use longer delay and add cache-busting to ensure fresh data
           setTimeout(async () => {
-            hasLoadedRef.current = false;
-            await loadMapStructure(true);
-            console.log('[PLANT] Second reload completed for verification');
-          }, 500);
-        } catch (reloadError) {
-          console.error('[PLANT] Error reloading map after cycle reset:', reloadError);
+            try {
+              console.log('[PLANT] Reloading map structure after cycle reset...');
+              // Force reload by resetting flag and calling loadMapStructure
+              hasLoadedRef.current = false;
+
+              // Add a small cache-busting delay and reload
+              await new Promise(resolve => setTimeout(resolve, 300));
+              await loadMapStructure(true);
+
+              // Verify the reload worked by checking tracker colors
+              console.log('[PLANT] Map structure reloaded after cycle reset');
+
+              // Double-check: reload again after another short delay to ensure consistency
+              setTimeout(async () => {
+                hasLoadedRef.current = false;
+                await loadMapStructure(true);
+                console.log('[PLANT] Second reload completed for verification');
+              }, 500);
+            } catch (reloadError) {
+              console.error('[PLANT] Error reloading map after cycle reset:', reloadError);
+            }
+          }, 800);
+
+          setAlertSuccess(`${plantLabels.cycleName} reset successfully! New ${plantLabels.cycleName.toLowerCase()}: ${result.new_cycle_number}`);
+        } catch (error) {
+          console.error('[PLANT] Error resetting cycle:', error);
+          setAlertError('Failed to reset cycle: ' + (error.response?.data?.error || error.message));
+        } finally {
+          setResettingCycle(false);
         }
-      }, 800);
-      
-      setAlertSuccess(`Cycle reset successfully! New cycle: ${result.new_cycle_number}`);
-    } catch (error) {
-      console.error('[PLANT] Error resetting cycle:', error);
-      setAlertError('Failed to reset cycle: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setResettingCycle(false);
-    }
-  }, [viewMode, isAdmin, loadMapStructure]);
+      }
+    });
+  }, [viewMode, isAdmin, loadMapStructure, plantLabels]);
+
+  // Handle clear cycle to zero (system_owner only)
+  const handleClearCycleToZero = useCallback(async () => {
+    setConfirmDialog({
+      title: `Clear ${plantLabels.cycleName} to Zero`,
+      message: `This will permanently delete ALL ${plantLabels.cycleName.toLowerCase()} history for ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} and reset the count to 0.\n\nAll ${plantLabels.trackerName.toLowerCase()} colors will be reset to white.\n\nThis action cannot be undone.`,
+      confirmLabel: 'Clear to Zero',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await clearCycleToZero(viewMode);
+          setCurrentCycle(null);
+          hasLoadedRef.current = false;
+          await loadMapStructure(true);
+          setAlertSuccess(`${plantLabels.cycleName} cleared to zero successfully`);
+        } catch (error) {
+          const errMsg = error.response?.data?.error || error.message || 'Unknown error';
+          setAlertError('Failed to clear cycles: ' + (typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)));
+        }
+      }
+    });
+  }, [viewMode, loadMapStructure, plantLabels]);
 
   // Calculate detailed statistics for report
   const statistics = useMemo(() => {
-    const allTrackers = trackers.filter(t => t.id !== 'SITE_OFFICE');
+    const allTrackers = trackers.filter(t => !t.id.startsWith('SITE_OFFICE'));
     if (allTrackers.length === 0) {
       return {
         progress: 0,
@@ -676,14 +733,15 @@ function Plant() {
       <ErrorAlert error={alertError} onClose={() => setAlertError(null)} />
       <SuccessAlert message={alertSuccess} onClose={() => setAlertSuccess(null)} />
       <InfoAlert message={alertInfo} onClose={() => setAlertInfo(null)} />
+      <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
       {/* Header */}
       <div style={{ width: '100%', maxWidth: '1200px', marginBottom: '10px' }}>
         <h2 className="page-title" style={{ margin: '0 0 10px 0', textAlign: 'center' }}>{siteMapName}</h2>
         
         {/* Controls */}
-        <div style={{ 
-          display: 'flex', 
+        <div className="plant-controls-wrapper" style={{
+          display: 'flex',
           flexDirection: 'column',
           gap: '12px',
           padding: '15px',
@@ -691,7 +749,7 @@ function Plant() {
           borderRadius: '8px'
         }}>
           {/* First Row: View, Progress Bar, and Selection Controls */}
-          <div style={{ 
+          <div className="plant-controls-row" style={{ 
             display: 'flex', 
             justifyContent: 'center',
             alignItems: 'center', 
@@ -699,15 +757,15 @@ function Plant() {
             flexWrap: 'wrap'
           }}>
             {/* View and Progress Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ fontWeight: 'bold', fontSize: '14px' }}>View:</label>
+            <div className="plant-view-progress" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+              <div className="plant-view-select" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <label style={{ fontWeight: 'bold', fontSize: '12px' }}>View:</label>
                 <select 
                   value={viewMode} 
                   onChange={(e) => setViewMode(e.target.value)}
                   style={{ 
-                    padding: '6px 12px', 
-                    fontSize: '14px', 
+                    padding: '4px 6px', 
+                    fontSize: '12px', 
                     borderRadius: '4px',
                     border: '1px solid #ccc',
                     cursor: 'pointer'
@@ -718,8 +776,8 @@ function Plant() {
                 </select>
               </div>
               {/* Progress Bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '250px' }}>
+              <div className="plant-progress-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="plant-progress-bar" style={{ width: '250px' }}>
                   <div style={{
                     width: '100%',
                     height: '28px',
@@ -763,93 +821,119 @@ function Plant() {
                 {/* Clean Button - Show always during development for testing (normally only shows at 100%) */}
                 {hasAnyRole('system_owner', 'operations_admin') && (
                   <button
+                    className="plant-clean-btn"
                     onClick={handleResetCycle}
                     disabled={resettingCycle}
-                    title={`Reset ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} cycle and clear all trackers`}
+                    title={`Reset ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} ${plantLabels.cycleName.toLowerCase()} and clear all ${plantLabels.trackerName.toLowerCase()}`}
                     style={{
-                      padding: '6px 12px',
-                      fontSize: '13px',
+                      padding: '4px 8px',
+                      fontSize: '11px',
                       fontWeight: 'bold',
                       backgroundColor: '#4CAF50',
                       color: 'white',
                       border: 'none',
-                      borderRadius: '6px',
+                      borderRadius: '4px',
                       cursor: resettingCycle ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '3px',
                       opacity: resettingCycle ? 0.6 : 1,
-                      transition: 'opacity 0.2s, transform 0.1s',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!resettingCycle) {
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                        e.currentTarget.style.boxShadow = '0 3px 6px rgba(0,0,0,0.3)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    <span style={{ fontSize: '16px' }}>🧹</span>
-                    <span>{resettingCycle ? 'Cleaning...' : 'Clean'}</span>
+                    <span style={{ fontSize: '12px' }}>🧹</span>
+                    <span>{resettingCycle ? '...' : 'Clean'}</span>
+                  </button>
+                )}
+                {hasAnyRole('system_owner') && (
+                  <button
+                    className="plant-reset-btn"
+                    onClick={handleClearCycleToZero}
+                    title={`Clear ${plantLabels.cycleName} count to zero and delete all history`}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <span>Reset 0</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Selection Mode Toggle */}
-            <button
-              onClick={toggleSelectionMode}
-              className={selectionMode ? "btn btn-primary" : "btn btn-secondary"}
-              style={{ 
-                padding: '8px 16px', 
-                fontSize: '13px',
-                fontWeight: 'bold'
-              }}
-            >
-              {selectionMode ? 'Select' : 'Enable'}
-            </button>
+            {/* Action Buttons - compact horizontal group */}
+            <div className="plant-action-buttons" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
+              <button
+                onClick={toggleSelectionMode}
+                className={selectionMode ? "btn btn-primary" : "btn btn-secondary"}
+                style={{ 
+                  padding: '6px 10px', 
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}
+              >
+                {selectionMode ? '✓ Select' : 'Select'}
+              </button>
 
-            {/* Download Report Button */}
-            <button
-              onClick={handleDownloadReport}
-              className="btn btn-primary"
-              disabled={downloading || trackers.length === 0}
-              style={{ 
-                padding: '8px 16px', 
-                fontSize: '13px',
-                fontWeight: 'bold'
-              }}
-              title="Download plant map report with image and statistics"
-            >
-              {downloading ? 'Generating...' : 'Download'}
-            </button>
+              <button
+                onClick={handleDownloadReport}
+                className="btn btn-primary"
+                disabled={downloading || trackers.length === 0}
+                style={{ 
+                  padding: '6px 10px', 
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}
+                title="Download plant map report with image and statistics"
+              >
+                {downloading ? '...' : '↓ PDF'}
+              </button>
+
+              {hasAnyRole('system_owner') && (
+                <button
+                  onClick={() => setBuilderMode(!builderMode)}
+                  className={builderMode ? 'btn btn-danger' : 'btn btn-secondary'}
+                  style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 'bold' }}
+                  title="Visual map builder to create and edit sitemap layouts"
+                >
+                  <i className={`bi ${builderMode ? 'bi-x-lg' : 'bi-grid-3x3-gap'}`}></i>{' '}
+                  {builderMode ? 'Exit' : 'Builder'}
+                </button>
+              )}
+            </div>
 
             {/* Multi-Select Controls */}
             {selectionMode && (
               <div style={{ 
                 display: 'flex', 
-                gap: '8px', 
+                gap: '4px', 
                 alignItems: 'center',
-                padding: '6px 10px',
+                padding: '3px 6px',
                 background: '#e3f2fd',
-                borderRadius: '6px',
-                border: '2px solid #2196f3'
+                borderRadius: '4px',
+                border: '1px solid #2196f3'
               }}>
                 {selectedTrackers.size > 0 ? (
                   <>
-                    <span style={{ fontWeight: 'bold', color: '#1976d2', fontSize: '12px' }}>
-                      {selectedTrackers.size} selected
+                    <span style={{ fontWeight: 'bold', color: '#1976d2', fontSize: '11px' }}>
+                      {selectedTrackers.size} sel
                     </span>
                     <button
                       onClick={() => setShowStatusRequestModal(true)}
                       className="btn btn-primary"
                       style={{ 
-                        padding: '5px 12px', 
-                        fontSize: '12px',
+                        padding: '3px 8px', 
+                        fontSize: '11px',
                         fontWeight: 'bold'
                       }}
                     >
@@ -859,16 +943,16 @@ function Plant() {
                       onClick={clearSelection}
                       className="btn btn-secondary"
                       style={{ 
-                        padding: '5px 12px', 
-                        fontSize: '12px'
+                        padding: '3px 8px', 
+                        fontSize: '11px'
                       }}
                     >
                       Clear
                     </button>
                   </>
                 ) : (
-                  <span style={{ color: '#666', fontSize: '12px' }}>
-                    Tap trackers to select
+                  <span style={{ color: '#666', fontSize: '11px' }}>
+                    Tap to select
                   </span>
                 )}
               </div>
@@ -876,104 +960,131 @@ function Plant() {
           </div>
 
           {/* Second Row: Legend */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center',
-            gap: '16px', 
-            alignItems: 'center', 
-            fontSize: '12px',
-            paddingTop: '8px',
-            borderTop: '1px solid #ddd'
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '14px', height: '14px', background: '#fff', border: '1px solid #333', borderRadius: '2px' }}></span>
+          <div className="plant-legend-row">
+            <span className="plant-legend-item">
+              <span className="plant-legend-swatch" style={{ background: '#fff' }}></span>
               Not Done
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '14px', height: '14px', background: '#4CAF50', border: '1px solid #333', borderRadius: '2px' }}></span>
+            <span className="plant-legend-item">
+              <span className="plant-legend-swatch" style={{ background: '#4CAF50' }}></span>
               Done
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '14px', height: '14px', background: '#FF9800', border: '1px solid #333', borderRadius: '2px' }}></span>
+            <span className="plant-legend-item">
+              <span className="plant-legend-swatch" style={{ background: '#FF9800' }}></span>
               Halfway
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '14px', height: '14px', background: '#4169E1', border: '1px solid #333', borderRadius: '2px' }}></span>
+            <span className="plant-legend-item">
+              <span className="plant-legend-swatch" style={{ background: '#4169E1' }}></span>
               Site Office
             </span>
           </div>
         </div>
       </div>
 
-      {/* Map Container - Centered */}
-      <div 
-        style={{ 
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '100%',
-          padding: '10px'
-        }}
-      >
-        <div 
-          ref={mapContainerRef}
-          style={{
-            position: 'relative',
-            width: `${mapWidth}px`,
-            height: `${mapHeight}px`,
-            background: '#fafafa',
-            border: '2px solid #333',
-            borderRadius: '4px'
+      {/* Builder Mode or Normal Map View */}
+      {builderMode ? (
+        <SitemapBuilder
+          initialTrackers={trackers}
+          initialLabels={plantLabels}
+          onSave={async (newTrackers, newLabels) => {
+            await savePlantMapStructure(newTrackers, newLabels);
+            setTrackers(newTrackers);
+            if (newLabels) setPlantLabels(prev => ({ ...prev, ...newLabels }));
           }}
-        >
-          {/* Trackers */}
-          {trackers.map((tracker) => (
-            <TrackerBlock
-              key={tracker.id}
-              tracker={tracker}
-              bounds={bounds}
-              viewMode={viewMode}
-              isSelected={selectedTrackers.has(tracker.id)}
-              onSelect={handleTrackerSelect}
-              selectionMode={selectionMode}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ marginTop: '10px', fontSize: '12px', color: '#666', textAlign: 'center' }}>
-        <div style={{ marginBottom: '8px' }}>
-          Trackers: {trackers.filter(t => t.id !== 'SITE_OFFICE').length}
-          {selectionMode && ` | ${selectedTrackers.size} selected`}
-          {currentCycle && currentCycle.cycle_number && (
-            <span style={{ color: '#4CAF50', fontWeight: 'bold', marginLeft: '8px' }}>
-              | Cycle: {currentCycle.cycle_number}
-            </span>
-          )}
-          {currentCycle && (!currentCycle.cycle_number || currentCycle.cycle_number === null) && (
-            <span style={{ color: '#999', fontWeight: 'normal', marginLeft: '8px' }}>
-              | Cycle: Not Started
-            </span>
-          )}
-        </div>
-        
-        {/* Cycle completion indicator */}
-        {currentCycle && currentCycle.is_complete && (
-          <div style={{ 
-            marginTop: '8px', 
-            padding: '8px 12px', 
-            backgroundColor: '#4CAF50', 
-            color: 'white', 
-            borderRadius: '4px',
-            display: 'inline-block',
-            fontSize: '13px',
-            fontWeight: '500'
-          }}>
-            ✓ Cycle {currentCycle.cycle_number} Completed!
+          onExit={() => {
+            setBuilderMode(false);
+            hasLoadedRef.current = false;
+            loadMapStructure(true);
+          }}
+        />
+      ) : (
+        <>
+          {/* Map Container - Centered & Scaled to fit */}
+          <div
+            ref={mapScrollRef}
+            className="plant-map-scroll"
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'flex-start',
+              width: '100%',
+              padding: '8px',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                width: `${mapWidth}px`,
+                height: `${mapHeight * mapScale}px`,
+                position: 'relative',
+                flexShrink: 0
+              }}
+            >
+              <div
+                ref={mapContainerRef}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: `${mapWidth}px`,
+                  height: `${mapHeight}px`,
+                  background: '#fafafa',
+                  border: '2px solid #333',
+                  borderRadius: '4px',
+                  transform: `scale(${mapScale})`,
+                  transformOrigin: 'top left'
+                }}
+              >
+                {trackers.map((tracker) => (
+                  <TrackerBlock
+                    key={tracker.id}
+                    tracker={tracker}
+                    bounds={bounds}
+                    viewMode={viewMode}
+                    isSelected={selectedTrackers.has(tracker.id)}
+                    onSelect={handleTrackerSelect}
+                    selectionMode={selectionMode}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Footer */}
+          <div style={{ marginTop: '10px', fontSize: '12px', color: '#666', textAlign: 'center' }}>
+            <div style={{ marginBottom: '8px' }}>
+              {plantLabels.trackerName}: {trackers.filter(t => !t.id.startsWith('SITE_OFFICE')).length}
+              {selectionMode && ` | ${selectedTrackers.size} selected`}
+              {currentCycle && currentCycle.cycle_number && (
+                <span style={{ color: '#4CAF50', fontWeight: 'bold', marginLeft: '8px' }}>
+                  | {plantLabels.cycleName}: {currentCycle.cycle_number}
+                </span>
+              )}
+              {currentCycle && (!currentCycle.cycle_number || currentCycle.cycle_number === null) && (
+                <span style={{ color: '#999', fontWeight: 'normal', marginLeft: '8px' }}>
+                  | {plantLabels.cycleName}: Not Started
+                </span>
+              )}
+            </div>
+
+            {/* Cycle completion indicator */}
+            {currentCycle && currentCycle.is_complete && (
+              <div style={{
+                marginTop: '8px',
+                padding: '8px 12px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                borderRadius: '4px',
+                display: 'inline-block',
+                fontSize: '13px',
+                fontWeight: '500'
+              }}>
+                ✓ {plantLabels.cycleName} {currentCycle.cycle_number} Completed!
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Status Request Modal */}
       {showStatusRequestModal && (
@@ -1031,8 +1142,8 @@ function Plant() {
                 }}
                 disabled={submittingRequest}
               >
-                <option value="done">✅ Done (Completed)</option>
-                <option value="halfway">🔄 Halfway (In Progress)</option>
+                <option value="done">Done (Completed)</option>
+                <option value="halfway">Halfway (In Progress)</option>
               </select>
             </div>
 
@@ -1066,7 +1177,7 @@ function Plant() {
               border: '1px solid #ffc107'
             }}>
               <p style={{ margin: 0, fontSize: '13px', color: '#856404' }}>
-                ⚠️ <strong>Note:</strong> Your request will be sent to admin/superadmin for approval. 
+                <i className="bi bi-exclamation-triangle-fill"></i> <strong>Note:</strong> Your request will be sent to admin/superadmin for approval.
                 The tracker colors will only change after approval.
               </p>
             </div>
