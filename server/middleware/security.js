@@ -28,7 +28,7 @@ const securityHeaders = helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "https://*.devtunnels.ms", "https://*.vscode.dev"], // Allow Dev Tunnels and VS Code forwarded URLs
+      connectSrc: ["'self'", "https://*.devtunnels.ms", "https://*.vscode.dev", "https://fonts.googleapis.com"], // Allow Dev Tunnels, VS Code, and Google Fonts
       frameSrc: ["'none'"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null // Only in production

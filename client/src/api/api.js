@@ -110,10 +110,13 @@ export function getApiBaseUrl() {
     return detectedUrl;
   }
 
-  // Priority 6: Standard localhost or network access
-  const detectedUrl = `${protocol}//${hostname}:3001/api`;
+  // Priority 6: Same origin (production) or localhost:3001 (dev)
+  const port = window.location.port;
+  const isDefaultPort = !port || port === '80' || port === '443';
+  const detectedUrl = isDefaultPort
+    ? `${protocol}//${hostname}/api`
+    : `${protocol}//${hostname}:3001/api`;
   console.log('Auto-detected API URL:', detectedUrl);
-  console.log('Current location:', window.location.href);
   return detectedUrl;
 }
 
@@ -129,6 +132,26 @@ const api = axios.create({
   withCredentials: true, // Include cookies for session management
   timeout: 30000, // 30 second timeout (increased for debugging)
 });
+
+// JWT token for API requests (server supports Bearer token or session cookie)
+let authToken = null;
+
+export function setAuthToken(token) {
+  authToken = token;
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    try { sessionStorage.setItem('authToken', token); } catch (e) { /* ignore */ }
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+    try { sessionStorage.removeItem('authToken'); } catch (e) { /* ignore */ }
+  }
+}
+
+// Restore token on load (so refresh keeps user logged in)
+try {
+  const stored = sessionStorage.getItem('authToken');
+  if (stored) setAuthToken(stored);
+} catch (e) { /* ignore */ }
 
 // Add request interceptor for debugging
 api.interceptors.request.use(

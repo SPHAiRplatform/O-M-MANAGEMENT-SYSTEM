@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { getCurrentUser, login as apiLogin, logout as apiLogout } from '../api/api';
+import { getCurrentUser, login as apiLogin, logout as apiLogout, setAuthToken } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 
 const AuthContext = createContext(null);
@@ -31,6 +31,9 @@ export const AuthProvider = ({ children }) => {
       console.log('Login response:', response.data);
       
       if (response.data && response.data.user) {
+        if (response.data.token) {
+          setAuthToken(response.data.token);
+        }
         const userData = {
           ...response.data.user,
           permissions: response.data.user.permissions || []
@@ -79,6 +82,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      setAuthToken(null);
       setUser(null);
     }
   };

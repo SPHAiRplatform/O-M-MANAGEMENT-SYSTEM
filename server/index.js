@@ -756,6 +756,16 @@ initRedis().then(() => {
 // Global error handler (must be last middleware)
 const { globalErrorHandler, notFoundHandler } = require('./utils/errors');
 
+// Serve React build (frontend) - must be after all API routes
+const publicPath = path.join(__dirname, 'public');
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+}
+
 // Handle 404 errors (route not found)
 app.use(notFoundHandler);
 
