@@ -11,6 +11,7 @@ const { validateCreateTask } = require('../middleware/inputValidation');
 const { getDb } = require('../middleware/tenantContext');
 const { isSystemOwnerWithoutCompany } = require('../utils/organizationFilter');
 const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
+const { isDevelopment } = require('../utils/env');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -100,10 +101,11 @@ module.exports = (pool) => {
 
       query += ' ORDER BY t.created_at DESC';
 
-      // Log query for debugging
-      console.log(`[TASKS] User: ${req.session?.username || 'unknown'} (${req.session?.role || 'unknown'}) requesting tasks`);
-      console.log(`[TASKS] Query params:`, params);
-      
+      if (isDevelopment()) {
+        console.log(`[TASKS] User: ${req.session?.username || 'unknown'} (${req.session?.role || 'unknown'}) requesting tasks`);
+        console.log(`[TASKS] Query params:`, params);
+      }
+
       // Use req.db if available (has tenant context), otherwise fall back to pool
       const db = getDb(req, pool);
       let result;
@@ -137,16 +139,16 @@ module.exports = (pool) => {
         }
         return task;
       });
-      
-      console.log(`[TASKS] Fetched ${tasks.length} tasks for user: ${req.session?.username || 'unknown'}`);
-      console.log(`[TASKS] Status breakdown:`, 
-        tasks.reduce((acc, t) => {
+
+      if (isDevelopment()) {
+        console.log(`[TASKS] Fetched ${tasks.length} tasks for user: ${req.session?.username || 'unknown'}`);
+        console.log(`[TASKS] Status breakdown:`, tasks.reduce((acc, t) => {
           acc[t.status] = (acc[t.status] || 0) + 1;
           return acc;
-        }, {})
-      );
-      console.log(`[TASKS] Task codes:`, tasks.map(t => t.task_code).slice(0, 5));
-      
+        }, {}));
+        console.log(`[TASKS] Task codes:`, tasks.map(t => t.task_code).slice(0, 5));
+      }
+
       res.json(tasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);

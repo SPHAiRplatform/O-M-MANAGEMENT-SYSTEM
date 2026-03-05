@@ -231,7 +231,11 @@ api.interceptors.response.use(
       const status = error.response.status;
       const isExpected401 = status === 401 && (
         url.includes('/auth/me') ||
-        url.includes('/notifications/unread-count')
+        url.includes('/notifications/unread-count') ||
+        url.includes('/organizations/current/branding') ||
+        url.includes('/organizations/current/features') ||
+        url.includes('/auth/change-password') ||
+        (url.includes('/tasks') && status === 401)
       );
       if (!isExpected401) {
         console.error('API Error Response:', status, error.response.data);

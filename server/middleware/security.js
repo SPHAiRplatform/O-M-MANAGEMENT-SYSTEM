@@ -128,7 +128,6 @@ function validateUUIDParams(req, res, next) {
     (idParam && idParam.startsWith('fault-log'));
   
   if (isFaultLogRoute) {
-    console.log('[UUID VALIDATION] Skipping validation for fault-log route:', { path, originalUrl, idParam });
     return next();
   }
   

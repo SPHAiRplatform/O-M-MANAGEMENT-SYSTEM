@@ -2,6 +2,7 @@
 const { verifyToken, extractToken } = require('../utils/jwt');
 const { getTokenData, isRedisAvailable, isActiveSession } = require('../utils/redis');
 const { loadUserRBAC, loadUserPermissions, loadUserRoles } = require('./rbac');
+const { isDevelopment } = require('../utils/env');
 
 /**
  * Middleware factory to check if password change is required
@@ -102,25 +103,25 @@ async function requireAuth(req, res, next) {
       
       return next();
     } catch (error) {
-      console.log('JWT authentication failed:', error.message);
+      if (isDevelopment()) console.log('JWT authentication failed:', error.message);
       // Fall through to session-based authentication
     }
   }
 
   // Fallback to session-based authentication
-  // Debug session information
-  console.log('Auth check (session):', {
-    hasSession: !!req.session,
-    hasUserId: !!(req.session && req.session.userId),
-    sessionId: req.sessionID,
-    userId: req.session?.userId,
-    username: req.session?.username,
-    role: req.session?.role,
-    cookies: req.headers.cookie
-  });
+  if (isDevelopment()) {
+    console.log('Auth check (session):', {
+      hasSession: !!req.session,
+      hasUserId: !!(req.session && req.session.userId),
+      sessionId: req.sessionID,
+      userId: req.session?.userId,
+      username: req.session?.username,
+      role: req.session?.role
+    });
+  }
 
   if (!req.session || !req.session.userId) {
-    console.log('Authentication failed - no session or userId');
+    if (isDevelopment()) console.log('Authentication failed - no session or userId');
     return res.status(401).json({ error: 'Authentication required' });
   }
   

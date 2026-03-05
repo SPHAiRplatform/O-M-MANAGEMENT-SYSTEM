@@ -1086,6 +1086,72 @@ docker-compose logs --tail=20 app
 
 Set up CI/CD pipeline to automatically deploy on git push.
 
+### Fresh Clone Deployment (Clean Slate)
+
+Use this when the server has drifted from the repo (manual edits, different branch, or you want a clean state). This ensures the server runs exactly what is in the repository.
+
+**Prerequisites:** You have your `.env` and (if needed) DB connection details and CA cert paths.
+
+**Step 1: Back up what you need**
+```bash
+cd /opt/sphair
+cp .env /root/sphair.env.backup
+# If you use bind mounts and care about uploads/logs/backups:
+# tar -czf /root/sphair-uploads-backup.tar.gz server/uploads server/logs server/backups 2>/dev/null || true
+```
+
+**Step 2: Stop and remove containers**
+```bash
+cd /opt/sphair
+docker-compose down
+```
+
+**Step 3: Rename old app directory and clone fresh**
+```bash
+cd /opt
+mv sphair sphair.old
+git clone https://github.com/SPHAiRplatform/O-M-MANAGEMENT-SYSTEM.git sphair
+cd sphair
+```
+
+**Step 4: Restore environment file**
+```bash
+cp /root/sphair.env.backup /opt/sphair/.env
+# Edit if needed (e.g. paths, DB host)
+nano .env
+```
+
+**Step 5: Start only postgres, redis, and app (skip nginx if host Nginx uses port 80)**
+```bash
+cd /opt/sphair
+docker-compose up -d postgres redis app
+```
+
+If you use **host Nginx** (not the compose nginx service) because port 80 is already in use, do **not** run `docker-compose up -d` without arguments. Use the command above.
+
+**Step 6: Run database setup (only if new DB or you need schema/seed)**
+```bash
+docker-compose run --rm app node scripts/setup-db.js
+```
+
+**Step 7: Rebuild app image and restart app (to use latest code)**
+```bash
+docker-compose build app
+docker-compose stop app
+docker rm sphairdigital-app
+docker-compose up -d postgres redis app
+```
+
+**Step 8: Verify**
+```bash
+docker-compose ps
+curl -s http://127.0.0.1:3001/api/platform/health
+```
+
+Expected: `{"status":"healthy",...}`. Then open `https://yourdomain.com` in a browser.
+
+**If `docker-compose build app` fails on `npm ci` (server stage):** Edit the Dockerfile and change the server stage line from `RUN npm ci --only=production` to `RUN npm install --only=production`, then run the build again.
+
 ### Backup Restoration
 
 **Restore database:**
