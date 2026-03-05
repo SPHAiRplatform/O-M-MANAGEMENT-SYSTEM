@@ -25,13 +25,19 @@ const securityHeaders = helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "https://*.devtunnels.ms", "https://*.vscode.dev", "https://fonts.googleapis.com"], // Allow Dev Tunnels, VS Code, and Google Fonts
+      connectSrc: [
+        "'self'",
+        "https://*.devtunnels.ms",
+        "https://*.vscode.dev",
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com"
+      ],
       frameSrc: ["'none'"],
       objectSrc: ["'none'"],
-      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null // Only in production
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
     }
   },
   // Cross-Origin Resource Policy - COMPLETELY DISABLED

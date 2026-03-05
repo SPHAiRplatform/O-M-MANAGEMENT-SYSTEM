@@ -227,9 +227,17 @@ api.interceptors.response.use(
     if (error.code === 'ECONNABORTED') {
       console.error('API Request Timeout:', error.config?.url);
     } else if (error.response) {
-      console.error('API Error Response:', error.response.status, error.response.data);
-      console.error('Error URL:', error.config?.url);
-      console.error('Error Method:', error.config?.method);
+      const url = error.config?.url || '';
+      const status = error.response.status;
+      const isExpected401 = status === 401 && (
+        url.includes('/auth/me') ||
+        url.includes('/notifications/unread-count')
+      );
+      if (!isExpected401) {
+        console.error('API Error Response:', status, error.response.data);
+        console.error('Error URL:', url);
+        console.error('Error Method:', error.config?.method);
+      }
     } else if (error.request) {
       // Only log network errors, don't spam console
       if (!error.config?.url?.includes('/tasks?status=in_progress')) {

@@ -470,19 +470,21 @@ function AppContent() {
 function NotificationBadge() {
   const [unreadCount, setUnreadCount] = useState(0);
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
+    if (!user) return;
     loadCount();
-    const interval = setInterval(loadCount, 30000); // Refresh every 30 seconds
+    const interval = setInterval(loadCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   const loadCount = async () => {
     try {
       const response = await getUnreadNotificationCount();
       setUnreadCount(response.data.count);
     } catch (error) {
-      console.error('Error loading notification count:', error);
+      // Silently ignore - user may have logged out between interval ticks
     }
   };
 
@@ -532,6 +534,7 @@ function Header() {
 
   // Load unread notification count (so mobile users see badge next to name before opening menu)
   useEffect(() => {
+    if (!user) return;
     const loadUnreadCount = async () => {
       try {
         const response = await getUnreadNotificationCount();
@@ -543,7 +546,7 @@ function Header() {
     loadUnreadCount();
     const interval = setInterval(loadUnreadCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   // Helper function to get company abbreviation
   const getCompanyAbbreviation = (name) => {
