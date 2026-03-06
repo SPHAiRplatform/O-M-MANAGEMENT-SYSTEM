@@ -60,6 +60,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-${SESSION_SECRET}}
       PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN}
       PLATFORM_UPDATE_IPS: ${PLATFORM_UPDATE_IPS:-}
+      DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     volumes:
       - ./server/uploads:/app/uploads
       - ./server/logs:/app/logs
@@ -75,16 +77,18 @@ services:
     networks:
       - sphairdigital-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001/api/platform/health | grep -q healthy && exit 0 || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-  # Nginx Reverse Proxy (Optional)
+  # Nginx Reverse Proxy (Optional — only starts with: docker compose --profile nginx up)
   nginx:
     image: nginx:alpine
     container_name: sphairdigital-nginx
+    profiles:
+      - nginx
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro

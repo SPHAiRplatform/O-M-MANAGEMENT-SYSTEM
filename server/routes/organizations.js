@@ -305,7 +305,7 @@ module.exports = (pool) => {
           const username = firstUser.username.trim();
           const email = firstUser.email.trim();
           const fullName = firstUser.full_name.trim();
-          const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
+          const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'ChangeMe1!';
           const password = (firstUser.password && firstUser.password.trim()) ? firstUser.password.trim() : DEFAULT_PASSWORD;
           const passwordHash = await bcrypt.hash(password, 10);
           const userId = uuidv4();

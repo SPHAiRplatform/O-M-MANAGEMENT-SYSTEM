@@ -8,11 +8,6 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
   let hasFailures = false;
   let hasPasses = false;
 
-  // Debug: log what we're validating
-  console.log('[VALIDATION] responseData type:', typeof responseData);
-  console.log('[VALIDATION] responseData keys:', typeof responseData === 'object' ? Object.keys(responseData) : 'N/A');
-  console.log('[VALIDATION] validationRules:', JSON.stringify(validationRules));
-
   if (!checklistStructure || !checklistStructure.sections) {
     return {
       isValid: false,
@@ -25,7 +20,6 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
   checklistStructure.sections.forEach((section) => {
     section.items.forEach((item) => {
       const responseValue = getResponseValue(responseData, item.id);
-      console.log(`[VALIDATION] item "${item.id}" type="${item.type}" required=${item.required} hasValidation=${!!item.validation} responseValue=`, JSON.stringify(responseValue));
 
       // Check required fields
       if (item.required) {
@@ -71,10 +65,8 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
         if (item.type === 'pass_fail' || item.type === 'pass_fail_with_measurement') {
           if (typeof responseValue === 'object' && responseValue.status === 'fail') {
             hasFailures = true;
-            console.log(`[VALIDATION] -> FAIL (pass_fail status='fail')`);
           } else if (typeof responseValue === 'object' && responseValue.status === 'pass') {
             hasPasses = true;
-            console.log(`[VALIDATION] -> PASS (pass_fail status='pass')`);
           }
         }
         // For checkbox items: unchecked (false) = fail, checked (true) = pass
@@ -84,19 +76,15 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
             const itemValidation = validateItem(item, responseValue);
             if (itemValidation === 'fail') {
               hasFailures = true;
-              console.log(`[VALIDATION] -> FAIL (checkbox with validation)`);
             } else if (itemValidation === 'pass') {
               hasPasses = true;
-              console.log(`[VALIDATION] -> PASS (checkbox with validation)`);
             }
           } else {
             // Default checkbox behavior: checked=pass, unchecked=fail
             if (responseValue === true) {
               hasPasses = true;
-              console.log(`[VALIDATION] -> PASS (checkbox checked, no validation)`);
             } else if (responseValue === false) {
               hasFailures = true;
-              console.log(`[VALIDATION] -> FAIL (checkbox unchecked, no validation)`);
             }
           }
         }
@@ -105,10 +93,8 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
           const itemValidation = validateItem(item, responseValue);
           if (itemValidation === 'fail') {
             hasFailures = true;
-            console.log(`[VALIDATION] -> FAIL (validation rule)`);
           } else if (itemValidation === 'pass') {
             hasPasses = true;
-            console.log(`[VALIDATION] -> PASS (validation rule)`);
           }
         }
       }
@@ -127,8 +113,6 @@ function validateChecklistResponse(responseData, checklistStructure, validationR
     // Default: fail if any failures
     overallStatus = hasFailures ? 'fail' : 'pass';
   }
-
-  console.log(`[VALIDATION] RESULT: hasFailures=${hasFailures} hasPasses=${hasPasses} overallStatus=${overallStatus}`);
 
   return {
     isValid: errors.length === 0,

@@ -13,10 +13,12 @@ const logger = require('./logger');
  */
 const REQUIRED_PROD_VARS = [
   'SESSION_SECRET',
+  'JWT_SECRET',
   'DB_HOST',
   'DB_NAME',
   'DB_USER',
-  'DB_PASSWORD'
+  'DB_PASSWORD',
+  'DEFAULT_USER_PASSWORD'
 ];
 
 /**
@@ -33,6 +35,7 @@ const RECOMMENDED_VARS = [
   'REDIS_ENABLED',
   'REDIS_URL',
   'CORS_ORIGIN',
+  'PLATFORM_SERVICE_TOKEN',
   'SENDGRID_API_KEY',
   'SENTRY_DSN'
 ];

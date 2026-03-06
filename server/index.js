@@ -18,7 +18,8 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const { Pool } = require('pg');
-const { initRedis } = require('./utils/redis');
+const { initRedis, getRedisClient, isRedisAvailable } = require('./utils/redis');
+const RedisStore = require('connect-redis').default;
 
 // Security middleware
 const { securityHeaders, sanitizeRequestBody, limitRequestSize, validateUUIDParams } = require('./middleware/security');
@@ -164,14 +165,19 @@ app.options('*', (req, res) => {
 
 // CORS configuration - MUST be applied BEFORE Helmet and other middleware
 // In production, set CORS_ORIGIN to specific allowed origins
-const corsOrigin = process.env.CORS_ORIGIN || 'true'; // Allow all in dev, specific origins in prod
+// Accept both CORS_ORIGIN and CORS_ORIGINS (plural) for flexibility
+const corsOrigin = process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || (isProduction() ? '' : 'true');
 let corsOriginConfig;
-if (corsOrigin === 'true' || corsOrigin === true) {
-  corsOriginConfig = true; // Allow all origins
+if (!corsOrigin || corsOrigin === '') {
+  // Production with no CORS configured: allow same-origin only (secure default)
+  corsOriginConfig = false;
+  logger.warn('CORS: No CORS_ORIGIN set. Only same-origin requests allowed. Set CORS_ORIGIN to allow cross-origin requests.');
+} else if (corsOrigin === 'true' || corsOrigin === true) {
+  corsOriginConfig = true; // Allow all origins (dev only)
 } else if (typeof corsOrigin === 'string') {
   corsOriginConfig = corsOrigin.split(',').map(origin => origin.trim());
 } else {
-  corsOriginConfig = true; // Default to allow all
+  corsOriginConfig = false;
 }
 
 // Apply CORS to all routes EXCEPT /uploads (static files have their own CORS handling)
@@ -329,24 +335,29 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(session({
+// Session store: Redis-backed in production, MemoryStore in development
+// Redis client is initialized before server starts (see initRedis() below)
+// We use a deferred middleware that waits for Redis before handling requests
+const sessionConfig = {
   secret: sessionSecret || 'CHANGE-THIS-SECRET-IN-PRODUCTION-USE-RANDOM-STRING',
-  resave: false, // Don't save session if unmodified
-  saveUninitialized: false, // Don't create session until something is stored
-  name: 'sessionId', // Don't use default 'connect.sid' for security
+  resave: false,
+  saveUninitialized: false,
+  name: 'sessionId',
   cookie: {
-    secure: cookieSecure, // false for localhost (HTTP), true for HTTPS
-    httpOnly: true, // Prevent XSS attacks
-    sameSite: cookieSameSite, // 'none' for cross-origin (Dev Tunnels), 'lax' for same-origin (localhost)
-    maxAge: isDevelopment() 
-      ? parseInt(process.env.SESSION_MAX_AGE_MS || '604800000', 10) // 7 days in development
-      : parseInt(process.env.SESSION_MAX_AGE_MS || '86400000', 10), // 24 hours in production
-    domain: undefined // Don't set domain to allow cross-subdomain cookies
-  },
-  // Use secure session store in production (Redis recommended)
-  // For now using memory store (not suitable for production with multiple servers)
-  // Important: session is saved automatically when response is sent if session was modified
-}));
+    secure: cookieSecure,
+    httpOnly: true,
+    sameSite: cookieSameSite,
+    maxAge: isDevelopment()
+      ? parseInt(process.env.SESSION_MAX_AGE_MS || '604800000', 10)
+      : parseInt(process.env.SESSION_MAX_AGE_MS || '86400000', 10),
+    domain: undefined
+  }
+};
+
+// The actual session middleware is set up after Redis initializes (see initRedis().then())
+// This placeholder will be replaced with the real middleware once Redis is ready
+let sessionMiddleware = session(sessionConfig); // Start with MemoryStore
+app.use((req, res, next) => sessionMiddleware(req, res, next));
 
 logger.info(`Session cookie configuration: secure=${cookieSecure}, sameSite=${cookieSameSite}, isHTTPS=${isHTTPS}, isDevTunnels=${isDevTunnels}`);
 
@@ -410,6 +421,41 @@ const pool = new Pool({
 // Optional API token auth (Bearer tok_...)
 const apiTokenAuth = require('./middleware/apiTokenAuth');
 app.use(apiTokenAuth(pool));
+
+// JWT auth fallback — if session cookie is missing but a valid JWT Bearer token is present,
+// populate req.session from the JWT payload so auth-gated endpoints work in production
+// (e.g. when secure cookies can't be sent over HTTP behind a reverse proxy)
+const { verifyToken, extractToken } = require('./utils/jwt');
+const { getTokenData } = require('./utils/redis');
+app.use(async (req, res, next) => {
+  // Skip if session already has a userId (cookie-based session is working)
+  if (req.session && req.session.userId) return next();
+
+  const token = extractToken(req);
+  if (!token) return next();
+
+  try {
+    // Verify the JWT signature and expiry
+    const decoded = verifyToken(token);
+    if (!decoded || !decoded.userId) return next();
+
+    // Check Redis for stored token data (richer info + allows revocation)
+    const redisData = await getTokenData(token);
+
+    // Populate session from JWT / Redis data
+    req.session.userId = decoded.userId;
+    req.session.username = redisData?.username || decoded.username;
+    req.session.role = redisData?.role || decoded.role || 'technician';
+    req.session.roles = redisData?.roles || decoded.roles || [decoded.role || 'technician'];
+    req.session.fullName = redisData?.fullName || decoded.fullName;
+    req.session.permissions = redisData?.permissions || decoded.permissions || [];
+    req.session._fromJwt = true; // Flag for debugging
+  } catch (err) {
+    // Token invalid/expired — continue unauthenticated
+    logger.debug('JWT auth fallback: token invalid', { error: err.message });
+  }
+  next();
+});
 
 // Test database connection
 pool.query('SELECT NOW()', (err, res) => {
@@ -714,8 +760,17 @@ setTimeout(async () => {
 // Initialize Redis and start server
 // In production, Redis is required and initRedis will exit if it fails
 initRedis().then(() => {
-  const { isRedisAvailable } = require('./utils/redis');
   const redisStatus = isRedisAvailable() ? 'enabled' : 'disabled';
+
+  // Upgrade session store to Redis if available
+  if (isRedisAvailable()) {
+    const redisClient = getRedisClient();
+    const redisStore = new RedisStore({ client: redisClient, prefix: 'sess:' });
+    sessionMiddleware = session({ ...sessionConfig, store: redisStore });
+    logger.info('Session store upgraded to Redis');
+  } else if (isProduction()) {
+    logger.warn('Session store is MemoryStore — sessions will be lost on restart');
+  }
   
   app.listen(PORT, '0.0.0.0', () => {
     logger.info(`Server started successfully`, { 

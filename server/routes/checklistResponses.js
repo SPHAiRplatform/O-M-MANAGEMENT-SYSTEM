@@ -350,15 +350,12 @@ module.exports = (pool) => {
       
       // If PM task failed, generate CM task
       if (updatedTask.task_type === 'PM' && overallStatus === 'fail' && updatedTask.checklist_template_id) {
-        console.log(`[CM-GEN] PM task failed! task_type=${updatedTask.task_type} overallStatus=${overallStatus} template_id=${updatedTask.checklist_template_id}`);
         try {
           // Get checklist template to find CM generation rules
           const cmRulesResult = await db.query(
             'SELECT cm_generation_rules FROM checklist_templates WHERE id = $1',
             [updatedTask.checklist_template_id]
           );
-
-          console.log(`[CM-GEN] cmRulesResult rows: ${cmRulesResult.rows.length}, raw value:`, JSON.stringify(cmRulesResult.rows[0]?.cm_generation_rules));
 
           if (cmRulesResult.rows.length > 0) {
             let cmRules = cmRulesResult.rows[0].cm_generation_rules;
@@ -370,11 +367,8 @@ module.exports = (pool) => {
               }
             }
 
-            console.log(`[CM-GEN] cmRules after parse:`, JSON.stringify(cmRules), `auto_generate=${cmRules?.auto_generate}`);
-
             // Generate CM task when PM fails — default to auto-generate unless explicitly disabled
             const shouldAutoGenerate = !cmRules || cmRules.auto_generate !== false;
-            console.log(`[CM-GEN] shouldAutoGenerate=${shouldAutoGenerate}`);
             if (shouldAutoGenerate) {
               // Find CM template for the same asset type
               const cmTemplateResult = await db.query(

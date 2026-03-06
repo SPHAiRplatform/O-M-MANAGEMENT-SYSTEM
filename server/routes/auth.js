@@ -172,8 +172,8 @@ module.exports = (pool) => {
       await clearAccountLockout(req);
 
       // Check if user is using default password
-      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
-      const isDefaultPassword = await bcrypt.compare(DEFAULT_PASSWORD, user.password_hash);
+      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD;
+      const isDefaultPassword = DEFAULT_PASSWORD ? await bcrypt.compare(DEFAULT_PASSWORD, user.password_hash) : false;
 
       // Check password_changed column if it exists
       let passwordChanged = true; // Default to true for backward compatibility

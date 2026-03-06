@@ -502,7 +502,10 @@ module.exports = (pool) => {
 
       // Use default password from environment if no password provided (super admin only)
       const useDefaultPassword = !password || password.trim() === '';
-      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '000001';
+      if (!process.env.DEFAULT_USER_PASSWORD) {
+        console.warn('[USERS] WARNING: DEFAULT_USER_PASSWORD env var not set. Using fallback password.');
+      }
+      const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'ChangeMe1!';
       
       if (!useDefaultPassword && password.length < 6) {
         return res.status(400).json({ error: 'Password must be at least 6 characters long' });

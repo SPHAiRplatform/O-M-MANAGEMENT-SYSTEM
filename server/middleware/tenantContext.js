@@ -15,6 +15,27 @@
  */
 
 /**
+ * Validate UUID format to prevent injection in SET commands
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(value) {
+  return typeof value === 'string' && UUID_REGEX.test(value);
+}
+
+/**
+ * Safely set a PostgreSQL session variable — only allows valid UUIDs, empty string, or 'true'/'false'
+ */
+async function safeSetVar(client, varName, value) {
+  if (value === '' || value === 'true' || value === 'false') {
+    await client.query(`SET ${varName} = '${value}'`);
+  } else if (isValidUUID(value)) {
+    await client.query(`SET ${varName} = '${value}'`);
+  } else {
+    throw new Error(`Invalid value for ${varName}: ${String(value).substring(0, 50)}`);
+  }
+}
+
+/**
  * Helper function to check if route is a platform route
  * Platform routes are for system-wide administration
  */
@@ -98,10 +119,9 @@ function setTenantContext(pool) {
         if (isPlatform && isSystemOwner && !isTenant) {
           // Platform mode - skip RLS, use application-level filtering
           // Don't set organization_id in session variables
-          await client.query(`SET app.current_organization_id = ''`);
-          await client.query(`SET app.current_user_id = '${userId}'`);
-          // Cache system owner status for optimized RLS policies
-          await client.query(`SET app.current_user_is_system_owner = 'true'`);
+          await safeSetVar(client, 'app.current_organization_id', '');
+          await safeSetVar(client, 'app.current_user_id', userId);
+          await safeSetVar(client, 'app.current_user_is_system_owner', 'true');
 
           // Store platform context
           req.platformMode = true;
@@ -148,15 +168,15 @@ function setTenantContext(pool) {
           // These are used by RLS policies via get_current_organization_id() function
           // Note: Using SET (not SET LOCAL) so variables persist for the connection
           if (organizationId) {
-            await client.query(`SET app.current_organization_id = '${organizationId}'`);
+            await safeSetVar(client, 'app.current_organization_id', organizationId);
           } else {
-            await client.query(`SET app.current_organization_id = ''`);
+            await safeSetVar(client, 'app.current_organization_id', '');
           }
 
-          await client.query(`SET app.current_user_id = '${userId}'`);
+          await safeSetVar(client, 'app.current_user_id', userId);
 
           // Cache system owner status for optimized RLS policies (once per request)
-          await client.query(`SET app.current_user_is_system_owner = '${isSystemOwner}'`);
+          await safeSetVar(client, 'app.current_user_is_system_owner', String(isSystemOwner));
 
           // Fetch organization slug for file storage
           let organizationSlug = null;
