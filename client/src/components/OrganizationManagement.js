@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SuccessAlert } from './ErrorAlert';
@@ -226,7 +226,7 @@ function OrganizationManagement() {
   const loadOrganizations = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${getApiBaseUrl()}/organizations`, { credentials: 'include' });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations`);
       if (!response.ok) throw new Error('Failed to load organizations');
       const data = await response.json();
       setOrganizations(data);
@@ -305,10 +305,9 @@ function OrganizationManagement() {
     try {
       if (editingOrg) {
         // Simple edit - no wizard
-        const response = await fetch(`${getApiBaseUrl()}/organizations/${editingOrg.id}`, {
+        const response = await authFetch(`${getApiBaseUrl()}/organizations/${editingOrg.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify(formData)
         });
         if (!response.ok) {
@@ -330,10 +329,9 @@ function OrganizationManagement() {
               : undefined
         };
 
-        const response = await fetch(`${getApiBaseUrl()}/organizations`, {
+        const response = await authFetch(`${getApiBaseUrl()}/organizations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify(body)
         });
         if (!response.ok) {
@@ -352,10 +350,9 @@ function OrganizationManagement() {
             config: {}
           }));
           try {
-            await fetch(`${getApiBaseUrl()}/organizations/${newOrgId}/features`, {
+            await authFetch(`${getApiBaseUrl()}/organizations/${newOrgId}/features`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
               body: JSON.stringify({ features: featuresPayload })
             });
           } catch (_) {
@@ -409,7 +406,7 @@ function OrganizationManagement() {
     if (!orgToDelete) return;
     try {
       setError('');
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${orgToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${orgToDelete.id}`, { method: 'DELETE' });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to delete organization');
@@ -438,10 +435,9 @@ function OrganizationManagement() {
       onConfirm: async () => {
         try {
           setError('');
-          const response = await fetch(`${getApiBaseUrl()}/organizations/${org.id}`, {
+          const response = await authFetch(`${getApiBaseUrl()}/organizations/${org.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
             body: JSON.stringify({ name: org.name, slug: org.slug, is_active: false })
           });
           if (!response.ok) {
@@ -460,10 +456,9 @@ function OrganizationManagement() {
   const handleReactivate = async (org) => {
     try {
       setError('');
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${org.id}`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${org.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name: org.name, slug: org.slug, is_active: true })
       });
       if (!response.ok) {

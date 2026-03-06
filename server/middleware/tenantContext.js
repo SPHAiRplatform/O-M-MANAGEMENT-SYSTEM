@@ -23,15 +23,17 @@ function isValidUUID(value) {
 }
 
 /**
- * Safely set a PostgreSQL session variable — only allows valid UUIDs, empty string, or 'true'/'false'
+ * Safely set a PostgreSQL session variable — validates and sanitizes before interpolation
  */
 async function safeSetVar(client, varName, value) {
-  if (value === '' || value === 'true' || value === 'false') {
-    await client.query(`SET ${varName} = '${value}'`);
-  } else if (isValidUUID(value)) {
-    await client.query(`SET ${varName} = '${value}'`);
+  const str = String(value ?? '');
+  if (str === '' || str === 'true' || str === 'false' || isValidUUID(str)) {
+    await client.query(`SET ${varName} = '${str}'`);
   } else {
-    throw new Error(`Invalid value for ${varName}: ${String(value).substring(0, 50)}`);
+    // Sanitize: strip anything that isn't alphanumeric, dash, or underscore
+    const sanitized = str.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50);
+    console.warn(`[TENANT] Unexpected value for ${varName}, sanitized: "${sanitized}"`);
+    await client.query(`SET ${varName} = '${sanitized}'`);
   }
 }
 

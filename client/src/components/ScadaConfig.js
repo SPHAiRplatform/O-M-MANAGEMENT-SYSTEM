@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import { ConfirmDialog } from './ConfirmDialog';
 import './ScadaConfig.css';
@@ -51,8 +51,8 @@ function ScadaConfig() {
     try {
       setError('');
       const [connectionsRes, orgsRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/scada/connections`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/platform/organizations`, { credentials: 'include' })
+        authFetch(`${getApiBaseUrl()}/scada/connections`),
+        authFetch(`${getApiBaseUrl()}/platform/organizations`)
       ]);
 
       if (!connectionsRes.ok) throw new Error('Failed to load SCADA connections');
@@ -161,9 +161,8 @@ function ScadaConfig() {
         ? `${getApiBaseUrl()}/scada/connections/${editingConnection.id}`
         : `${getApiBaseUrl()}/scada/connections`;
 
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method: editingConnection ? 'PUT' : 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -187,9 +186,8 @@ function ScadaConfig() {
       setTestingId(connectionId);
       setTestResult(null);
 
-      const response = await fetch(`${getApiBaseUrl()}/scada/connections/${connectionId}/test`, {
-        method: 'POST',
-        credentials: 'include'
+      const response = await authFetch(`${getApiBaseUrl()}/scada/connections/${connectionId}/test`, {
+        method: 'POST'
       });
 
       const data = await response.json();
@@ -209,9 +207,8 @@ function ScadaConfig() {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          const response = await fetch(`${getApiBaseUrl()}/scada/connections/${conn.id}`, {
-            method: 'DELETE',
-            credentials: 'include'
+          const response = await authFetch(`${getApiBaseUrl()}/scada/connections/${conn.id}`, {
+            method: 'DELETE'
           });
           if (!response.ok) throw new Error('Failed to delete connection');
           setSuccessMessage('Connection deleted successfully');
@@ -226,9 +223,8 @@ function ScadaConfig() {
 
   const handleToggleActive = async (conn) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/scada/connections/${conn.id}`, {
+      const response = await authFetch(`${getApiBaseUrl()}/scada/connections/${conn.id}`, {
         method: 'PUT',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !conn.is_active })
       });

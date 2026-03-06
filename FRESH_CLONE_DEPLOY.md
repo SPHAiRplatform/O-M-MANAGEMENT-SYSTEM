@@ -24,11 +24,13 @@ docker-compose down
 
 ---
 
-## 3. Replace app with fresh clone
+## 3. Remove old app and clone fresh
+
+This deletes the old app directory and frees space. Back up `server/uploads`, `server/logs`, or `server/backups` in step 1 if you need them.
 
 ```bash
 cd /opt
-mv sphair sphair.old
+rm -rf sphair
 git clone https://github.com/SPHAiRplatform/O-M-MANAGEMENT-SYSTEM.git sphair
 cd sphair
 ```
@@ -108,7 +110,7 @@ If login or API calls return 403 “Just a moment…”:
 ## One-liner (after backup and restore of `.env`)
 
 ```bash
-cd /opt/sphair && docker-compose down && cd /opt && mv sphair sphair.old && git clone https://github.com/SPHAiRplatform/O-M-MANAGEMENT-SYSTEM.git sphair && cp /root/sphair.env.backup sphair/.env && cd sphair && docker-compose up -d postgres redis app && docker-compose run --rm app node scripts/setup-db.js && docker-compose build app && docker-compose stop app && docker rm sphairdigital-app 2>/dev/null; docker-compose up -d postgres redis app
+cd /opt/sphair && docker-compose down && cd /opt && rm -rf sphair && git clone https://github.com/SPHAiRplatform/O-M-MANAGEMENT-SYSTEM.git sphair && cp /root/sphair.env.backup sphair/.env && cd sphair && docker-compose up -d postgres redis app && docker-compose run --rm app node scripts/setup-db.js && docker-compose build app && docker-compose stop app && docker rm sphairdigital-app 2>/dev/null; docker-compose up -d postgres redis app
 ```
 
 Run steps individually if you prefer to verify each stage.

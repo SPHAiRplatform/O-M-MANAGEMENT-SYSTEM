@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import { SuccessAlert } from './ErrorAlert';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -71,7 +71,7 @@ function OrganizationSettings() {
 
   const loadOrganization = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}`, { credentials: 'include' });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}`);
       if (response.ok) {
         const data = await response.json();
         setOrganization(data);
@@ -84,7 +84,7 @@ function OrganizationSettings() {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/settings`, { credentials: 'include' });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/settings`);
       if (!response.ok) throw new Error('Failed to load settings');
 
       const data = await response.json();
@@ -139,10 +139,9 @@ function OrganizationSettings() {
         description: 'Maximum users for this organization'
       });
 
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/settings`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ settings: settingsToSave })
       });
 
@@ -171,10 +170,9 @@ function OrganizationSettings() {
     try {
       const settingValue = newSetting.setting_value ? JSON.parse(newSetting.setting_value) : null;
 
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/settings`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           settings: [{
             setting_key: newSetting.setting_key,

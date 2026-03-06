@@ -8,7 +8,7 @@ import {
   getInventoryItems 
 } from '../api/api';
 import './Dashboard.css';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany, getCurrentOrganizationSlug } from '../utils/organizationContext';
 import { 
@@ -268,9 +268,7 @@ function Dashboard() {
 
       // Fetch branding from database (includes logo_url, updated_at)
       try {
-        const response = await fetch(`${getApiBaseUrl()}/organizations/current/branding`, {
-          credentials: 'include'
-        });
+        const response = await authFetch(`${getApiBaseUrl()}/organizations/current/branding`);
 
         if (response.ok) {
           const branding = await response.json();

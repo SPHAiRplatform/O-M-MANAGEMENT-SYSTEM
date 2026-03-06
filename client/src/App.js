@@ -392,14 +392,7 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/tenant/audit-log" 
-            element={
-              <ProtectedRoute requireRole="system_owner">
-                <AuditLog />
-              </ProtectedRoute>
-            } 
-          />
+          {/* Audit Log route — platform only (see /platform/audit-log) */}
           <Route 
             path="/tenant/calendar" 
             element={
@@ -979,11 +972,7 @@ function Header() {
             Users
           </Link>
         )}
-        {isSuperAdmin() && (
-          <Link to="/tenant/audit-log" className={location.pathname === '/tenant/audit-log' ? 'active' : ''}>
-            Audit Log
-          </Link>
-        )}
+        {/* Audit Log moved to platform sidebar — accessible only for system_owner */}
         {/* License link removed - no longer needed */}
         {/* {isAdmin() && (
           <Link to="/tenant/license" className={location.pathname === '/tenant/license' ? 'active' : ''}>

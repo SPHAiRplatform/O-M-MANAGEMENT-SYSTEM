@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getApiBaseUrl, getPlatformSettings, updatePlatformSettings } from '../api/api';
+import { getApiBaseUrl, authFetch, getPlatformSettings, updatePlatformSettings } from '../api/api';
 import './PlatformSettings.css';
 
 function PlatformSettings() {
@@ -49,8 +49,8 @@ function PlatformSettings() {
   const loadSystemInfo = async () => {
     try {
       const [healthRes, statsRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/platform/health`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/platform/stats`, { credentials: 'include' })
+        authFetch(`${getApiBaseUrl()}/platform/health`),
+        authFetch(`${getApiBaseUrl()}/platform/stats`)
       ]);
 
       if (healthRes.ok) {

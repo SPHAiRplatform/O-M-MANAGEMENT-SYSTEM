@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import './PlatformDashboard.css';
 
@@ -27,10 +27,10 @@ function PlatformDashboard() {
       setError('');
 
       const [statsResponse, orgsResponse, healthResponse, activityResponse] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/platform/stats`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/platform/organizations`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/platform/health`, { credentials: 'include' }).catch(() => null),
-        fetch(`${getApiBaseUrl()}/platform/activity?limit=10`, { credentials: 'include' }).catch(() => null)
+        authFetch(`${getApiBaseUrl()}/platform/stats`),
+        authFetch(`${getApiBaseUrl()}/platform/organizations`),
+        authFetch(`${getApiBaseUrl()}/platform/health`).catch(() => null),
+        authFetch(`${getApiBaseUrl()}/platform/activity?limit=10`).catch(() => null)
       ]);
 
       if (!statsResponse.ok || !orgsResponse.ok) {
@@ -71,9 +71,8 @@ function PlatformDashboard() {
 
   const handleEnterCompany = async (organizationId, organizationSlug) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${organizationId}/enter`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${organizationId}/enter`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' }
       });
 

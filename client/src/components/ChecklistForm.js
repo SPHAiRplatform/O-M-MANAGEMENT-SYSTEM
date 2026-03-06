@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTask, submitChecklistResponse, saveDraftResponse, getDraftResponse, deleteDraftResponse, getInventoryItems } from '../api/api';
+import { getTask, submitChecklistResponse, saveDraftResponse, getDraftResponse, deleteDraftResponse, getInventoryItems, authFetch } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
 
@@ -405,10 +405,9 @@ function ChecklistForm() {
       const API_BASE_URL = process.env.REACT_APP_API_URL ||
         `${window.location.protocol}//${window.location.hostname}:3001/api`;
       
-      const response = await fetch(`${API_BASE_URL}/upload/failed-item`, {
+      const response = await authFetch(`${API_BASE_URL}/upload/failed-item`, {
         method: 'POST',
-        body: formData,
-        credentials: 'include' // keep session on mobile/desktop
+        body: formData
       });
 
       if (!response.ok) {

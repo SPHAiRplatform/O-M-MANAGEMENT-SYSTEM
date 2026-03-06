@@ -118,6 +118,12 @@ function Login() {
         navigate('/');
       } else {
         const errorMsg = getErrorMessage(result.error || result, 'Incorrect password');
+        const isConnectionError = errorContains(result.error || result, 'Connection failed') ||
+          (errorMsg && errorMsg.includes('Connection failed'));
+        if (isConnectionError && isAuthenticated()) {
+          navigate('/');
+          return;
+        }
         if (errorContains(result.error || result, 'ACCESS RESTRICTED') && result.admin_email) {
           setError(`Access restricted\nContact administrator: ${result.admin_email}`);
         } else {

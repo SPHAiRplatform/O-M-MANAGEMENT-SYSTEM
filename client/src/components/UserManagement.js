@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getUsers, createUser, updateUser, deactivateUser, deleteUser, getRoles } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import { ConfirmDialog } from './ConfirmDialog';
 import './UserManagement.css';
@@ -49,7 +49,7 @@ function UserManagement() {
 
   const loadOrgLimits = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/organizations/current/limits`, { credentials: 'include' });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/current/limits`);
       if (response.ok) {
         const data = await response.json();
         setOrgLimits({ user_count: data.user_count ?? 0, user_limit: data.user_limit ?? null });
@@ -78,9 +78,7 @@ function UserManagement() {
 
   const loadOrganizations = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/platform/organizations`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/organizations`);
       if (response.ok) {
         const data = await response.json();
         setAvailableOrganizations(data || []);

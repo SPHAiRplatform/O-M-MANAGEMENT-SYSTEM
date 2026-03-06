@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import './ScadaDashboard.css';
 
@@ -17,9 +17,9 @@ function ScadaDashboard() {
       setError('');
 
       const [summaryRes, alarmsRes, timeseriesRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/scada/data/summary`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/scada/alarms?status=active&limit=20`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/scada/data/timeseries?type=power&range=${timeRange}`, { credentials: 'include' })
+        authFetch(`${getApiBaseUrl()}/scada/data/summary`),
+        authFetch(`${getApiBaseUrl()}/scada/alarms?status=active&limit=20`),
+        authFetch(`${getApiBaseUrl()}/scada/data/timeseries?type=power&range=${timeRange}`)
       ]);
 
       if (summaryRes.ok) {
@@ -98,9 +98,8 @@ function ScadaDashboard() {
 
   const handleAcknowledgeAlarm = async (alarmId) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/scada/alarms/${alarmId}/acknowledge`, {
-        method: 'POST',
-        credentials: 'include'
+      const response = await authFetch(`${getApiBaseUrl()}/scada/alarms/${alarmId}/acknowledge`, {
+        method: 'POST'
       });
       if (response.ok) {
         loadData();

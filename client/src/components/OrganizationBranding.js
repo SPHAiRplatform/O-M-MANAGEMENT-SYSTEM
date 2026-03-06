@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import { SuccessAlert } from './ErrorAlert';
 import './UserManagement.css';
@@ -45,7 +45,7 @@ function OrganizationBranding() {
   useEffect(() => {
     if (organization && !logoPreview && !branding.logo_url) {
       const defaultLogoUrl = `${getUploadsBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
-      fetch(defaultLogoUrl, { method: 'HEAD', credentials: 'include' })
+      authFetch(defaultLogoUrl, { method: 'HEAD' })
         .then(res => {
           if (res.ok) {
             setLogoPreview(defaultLogoUrl);
@@ -59,9 +59,7 @@ function OrganizationBranding() {
 
   const loadOrganization = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}`);
       if (response.ok) {
         const data = await response.json();
         setOrganization(data);
@@ -74,9 +72,7 @@ function OrganizationBranding() {
   const loadBranding = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/branding`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/branding`);
 
       if (!response.ok) {
         throw new Error('Failed to load branding');
@@ -106,7 +102,7 @@ function OrganizationBranding() {
           if (organization) {
             const defaultLogoUrl = `${getUploadsBaseUrl()}/uploads/companies/${organization.slug}/logos/logo.png`;
             // Test if logo exists
-            fetch(defaultLogoUrl, { method: 'HEAD', credentials: 'include' })
+            authFetch(defaultLogoUrl, { method: 'HEAD' })
               .then(res => {
                 if (res.ok) {
                   setLogoPreview(defaultLogoUrl);
@@ -174,9 +170,8 @@ function OrganizationBranding() {
       const formData = new FormData();
       formData.append('logo', selectedLogoFile);
 
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/logo`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/logo`, {
         method: 'POST',
-        credentials: 'include',
         body: formData
       });
 
@@ -220,9 +215,8 @@ function OrganizationBranding() {
       setError('');
 
       // Use DELETE endpoint to remove logo file and clear database
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/logo`, {
-        method: 'DELETE',
-        credentials: 'include'
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/logo`, {
+        method: 'DELETE'
       });
 
       if (!response.ok) {
@@ -259,12 +253,11 @@ function OrganizationBranding() {
         branding_config: branding.branding_config ? JSON.parse(branding.branding_config) : {}
       };
 
-      const response = await fetch(`${getApiBaseUrl()}/organizations/${id}/branding`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/branding`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify(brandingToSave)
       });
 

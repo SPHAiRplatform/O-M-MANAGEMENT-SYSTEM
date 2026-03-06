@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import DataTable from './DataTable';
 import TableSkeleton from './TableSkeleton';
@@ -56,9 +56,7 @@ function PlatformUsers() {
 
   const loadAvailableRoles = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/users/roles`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/users/roles`);
       if (response.ok) {
         const data = await response.json();
         setAvailableRoles(data || []);
@@ -90,9 +88,7 @@ function PlatformUsers() {
 
   const loadAvailableOrganizations = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/platform/organizations`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/organizations`);
       if (response.ok) {
         const data = await response.json();
         setAvailableOrganizations(data || []);
@@ -104,9 +100,7 @@ function PlatformUsers() {
 
   const loadUserStats = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/platform/users/stats`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/users/stats`);
 
       if (!response.ok) {
         throw new Error('Failed to load user statistics');
@@ -149,9 +143,7 @@ function PlatformUsers() {
         params.append('sort_order', sortConfig.direction);
       }
 
-      const response = await fetch(`${getApiBaseUrl()}/platform/users?${params}`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/users?${params}`);
 
       if (!response.ok) {
         throw new Error('Failed to load users');
@@ -217,9 +209,7 @@ function PlatformUsers() {
       params.append('limit', '10000');
       params.append('page', '1');
 
-      const response = await fetch(`${getApiBaseUrl()}/platform/users?${params}`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/users?${params}`);
 
       if (!response.ok) {
         throw new Error('Failed to export users');

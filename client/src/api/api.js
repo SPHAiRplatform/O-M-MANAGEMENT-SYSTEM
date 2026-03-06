@@ -256,8 +256,21 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Authenticated fetch wrapper — adds JWT Authorization header to raw fetch() calls.
+ * Use this instead of raw fetch() for API calls that need authentication.
+ */
+export function authFetch(url, options = {}) {
+  const token = authToken || sessionStorage.getItem('authToken');
+  const headers = { ...(options.headers || {}) };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return fetch(url, { ...options, headers, credentials: 'include' });
+}
+
 // Authentication
-export const login = (username, password, rememberMe = false) => 
+export const login = (username, password, rememberMe = false) =>
   api.post('/auth/login', { username, password, remember_me: rememberMe });
 export const logout = () => api.post('/auth/logout');
 export const getCurrentUser = () => api.get('/auth/me');

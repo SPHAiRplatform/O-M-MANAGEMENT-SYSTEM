@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import {
   Chart as ChartJS,
@@ -54,9 +54,7 @@ function PlatformAnalytics() {
       setLoading(true);
       setError('');
 
-      const response = await fetch(`${getApiBaseUrl()}/platform/analytics?range=${timeRange}`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/platform/analytics?range=${timeRange}`);
 
       if (!response.ok) {
         throw new Error('Failed to load analytics');

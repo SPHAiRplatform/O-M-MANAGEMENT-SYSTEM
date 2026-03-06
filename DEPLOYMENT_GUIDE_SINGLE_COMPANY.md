@@ -1106,10 +1106,10 @@ cd /opt/sphair
 docker-compose down
 ```
 
-**Step 3: Rename old app directory and clone fresh**
+**Step 3: Remove old app directory and clone fresh**
 ```bash
 cd /opt
-mv sphair sphair.old
+rm -rf sphair
 git clone https://github.com/SPHAiRplatform/O-M-MANAGEMENT-SYSTEM.git sphair
 cd sphair
 ```

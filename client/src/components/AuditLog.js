@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 import DataTable from './DataTable';
 import TableSkeleton from './TableSkeleton';
@@ -43,9 +43,7 @@ function AuditLog() {
       if (fromDate) params.append('from', fromDate);
       if (toDate) params.append('to', toDate);
 
-      const response = await fetch(`${getApiBaseUrl()}/audit-log?${params}`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${getApiBaseUrl()}/audit-log?${params}`);
 
       if (!response.ok) throw new Error('Failed to load audit log');
 
@@ -62,8 +60,8 @@ function AuditLog() {
   const loadFilters = async () => {
     try {
       const [actionsRes, typesRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/audit-log/actions`, { credentials: 'include' }),
-        fetch(`${getApiBaseUrl()}/audit-log/entity-types`, { credentials: 'include' })
+        authFetch(`${getApiBaseUrl()}/audit-log/actions`),
+        authFetch(`${getApiBaseUrl()}/audit-log/entity-types`)
       ]);
 
       if (actionsRes.ok) {
