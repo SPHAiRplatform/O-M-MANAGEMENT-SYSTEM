@@ -19,7 +19,11 @@
       "Bash(npm run build)",
       "Bash(xargs head -200)",
       "Bash(ls -la /c/Users/mango/OneDrive/Documents/GitHub/SOLAR-MANAGEMENT-SYSTEM/server/db/migrations/*.sql)",
-      "Bash(npm info connect-redis@7 peerDependencies)"
+      "Bash(npm info connect-redis@7 peerDependencies)",
+      "Bash(npm info swagger-jsdoc@6.2.8 dependencies)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(npx -y node@18 -- -e \"console.log\\(process.version\\)\")"
     ]
   }
 }
