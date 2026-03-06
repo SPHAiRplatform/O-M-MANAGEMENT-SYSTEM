@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getApiBaseUrl } from './api/api';
+import { getApiBaseUrl, authFetch } from './api/api';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getUnreadNotificationCount, getCurrentOrganizationBranding } from './api/api';
@@ -572,9 +572,7 @@ function Header() {
         // If not in user object, try to get from branding API (has company_name_display)
         if (user.organization_id) {
           try {
-            const brandingResponse = await fetch(`${getApiBaseUrl()}/organizations/current/branding`, {
-              credentials: 'include'
-            });
+            const brandingResponse = await authFetch(`${getApiBaseUrl()}/organizations/current/branding`);
             if (brandingResponse.ok) {
               const branding = await brandingResponse.json();
               if (branding?.company_name_display) {
@@ -585,9 +583,7 @@ function Header() {
                   // If it's just the abbreviation (like "SIE"), fetch full name
                   if (orgName.length <= 5 && orgName === orgName.toUpperCase()) {
                     // It's an abbreviation, fetch full organization name
-                    const orgResponse = await fetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`, {
-                      credentials: 'include'
-                    });
+                    const orgResponse = await authFetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`);
                     if (orgResponse.ok) {
                       const org = await orgResponse.json();
                       setUserOrgName(org.name);
@@ -606,9 +602,7 @@ function Header() {
           }
           
           // Fallback: fetch organization name from API
-          const response = await fetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`, {
-            credentials: 'include'
-          });
+          const response = await authFetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`);
           if (response.ok) {
             const org = await response.json();
             setUserOrgName(org.name);
@@ -636,7 +630,7 @@ function Header() {
     if (user && isSuperAdmin()) {
       const loadOrgs = async () => {
         try {
-          const response = await fetch(`${getApiBaseUrl()}/platform/organizations`, { credentials: 'include' });
+          const response = await authFetch(`${getApiBaseUrl()}/platform/organizations`);
           if (response.ok) {
             const data = await response.json();
             setOrgList((data || []).filter(o => o.is_active !== false));
@@ -659,9 +653,8 @@ function Header() {
     navigate('/tenant/dashboard');
 
     // Fire the API call in the background (sets server-side session)
-    fetch(`${getApiBaseUrl()}/organizations/${org.id}/enter`, {
+    authFetch(`${getApiBaseUrl()}/organizations/${org.id}/enter`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' }
     }).catch(err => console.error('Error setting org session:', err));
   };
@@ -673,9 +666,8 @@ function Header() {
 
   const handleExitCompany = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/organizations/exit`, {
+      const response = await authFetch(`${getApiBaseUrl()}/organizations/exit`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         }

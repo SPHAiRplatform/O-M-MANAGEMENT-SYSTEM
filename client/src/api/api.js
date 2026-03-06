@@ -606,9 +606,8 @@ export const downloadFaultLog = async (period = 'all', params = {}) => {
   
   try {
     // Use fetch with credentials to ensure cookies are sent
-    const response = await fetch(url, {
+    const response = await authFetch(url, {
       method: 'GET',
-      credentials: 'include', // Important: include cookies for authentication
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       },
@@ -662,9 +661,8 @@ export const downloadInventoryExcel = async () => {
   
   try {
     // Use fetch with credentials to ensure cookies are sent
-    const response = await fetch(url, {
+    const response = await authFetch(url, {
       method: 'GET',
-      credentials: 'include', // Include cookies for authentication
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }
@@ -769,10 +767,9 @@ export const uploadProfileImage = async (file) => {
   const API_BASE_URL = getApiBaseUrl();
   
   try {
-    const response = await fetch(`${API_BASE_URL}/users/profile/me/avatar`, {
+    const response = await authFetch(`${API_BASE_URL}/users/profile/me/avatar`, {
       method: 'POST',
       body: formData,
-      credentials: 'include', // Include cookies for session management
     });
     
     if (!response.ok) {
@@ -814,9 +811,8 @@ export const removeProfileImage = async () => {
   const API_BASE_URL = getApiBaseUrl();
   
   try {
-    const response = await fetch(`${API_BASE_URL}/users/profile/me/avatar`, {
+    const response = await authFetch(`${API_BASE_URL}/users/profile/me/avatar`, {
       method: 'DELETE',
-      credentials: 'include', // Include cookies for session management
     });
     
     if (!response.ok) {
@@ -907,10 +903,9 @@ export const uploadYearCalendar = async (file) => {
   const API_BASE_URL = getApiBaseUrl();
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`${API_BASE_URL}/calendar/upload`, {
+  const response = await authFetch(`${API_BASE_URL}/calendar/upload`, {
     method: 'POST',
     body: formData,
-    credentials: 'include'
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -924,9 +919,7 @@ export const uploadYearCalendar = async (file) => {
 /** Download saved year calendar template (Excel) for current company, if one was uploaded. */
 export const downloadYearCalendarTemplate = async () => {
   const API_BASE_URL = getApiBaseUrl();
-  const response = await fetch(`${API_BASE_URL}/calendar/year-template`, {
-    credentials: 'include'
-  });
+  const response = await authFetch(`${API_BASE_URL}/calendar/year-template`);
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || data.message || 'Template not available');
@@ -951,10 +944,9 @@ export const uploadOrganizationLogo = async (id, file) => {
   const formData = new FormData();
   formData.append('logo', file);
   const API_BASE_URL = getApiBaseUrl();
-  const response = await fetch(`${API_BASE_URL}/organizations/${id}/logo`, {
+  const response = await authFetch(`${API_BASE_URL}/organizations/${id}/logo`, {
     method: 'POST',
     body: formData,
-    credentials: 'include',
   });
   if (!response.ok) {
     const error = await response.json();

@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getCurrentOrganizationBranding, getApiBaseUrl } from '../api/api';
+import { getCurrentOrganizationBranding, getApiBaseUrl, authFetch } from '../api/api';
 
 /**
  * Get company abbreviation from organization name
@@ -95,9 +95,7 @@ export function usePageTitle(customTitle = null) {
                 abbrev = getCompanyAbbreviation(user.organization_name);
               } else {
                 // Fallback: try to get organization name from API
-                const orgResponse = await fetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`, {
-                  credentials: 'include'
-                });
+                const orgResponse = await authFetch(`${getApiBaseUrl()}/organizations/${user.organization_id}`);
                 if (orgResponse.ok) {
                   const org = await orgResponse.json();
                   abbrev = getCompanyAbbreviation(org.name);
