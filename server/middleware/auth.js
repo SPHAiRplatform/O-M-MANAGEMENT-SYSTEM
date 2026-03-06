@@ -1,6 +1,6 @@
 // Authentication middleware
 const { verifyToken, extractToken } = require('../utils/jwt');
-const { getTokenData, isRedisAvailable, isActiveSession } = require('../utils/redis');
+const { isRedisAvailable } = require('../utils/redis');
 const { loadUserRBAC, loadUserPermissions, loadUserRoles } = require('./rbac');
 const { isDevelopment } = require('../utils/env');
 
@@ -58,48 +58,29 @@ async function requireAuth(req, res, next) {
       // Verify JWT token
       const decoded = verifyToken(token);
       
-      // Check if token exists in Redis (if Redis is available)
-      if (isRedisAvailable()) {
-        const tokenData = await getTokenData(token);
-        if (!tokenData) {
-          return res.status(401).json({ error: 'Token not found or expired' });
+      // Check Redis for single-device enforcement (if available)
+      // A valid JWT is sufficient for auth — Redis is optional for enrichment/revocation
+      if (isRedisAvailable() && !isDevelopment()) {
+        // Single-Device-Per-Session: only reject if another device explicitly logged in
+        const { getUserSession } = require('../utils/redis');
+        const existingSession = await getUserSession(decoded.userId);
+        if (existingSession && existingSession !== token) {
+          return res.status(401).json({
+            error: 'Session expired',
+            message: 'You have logged in from another device. Please log in again.'
+          });
         }
-        
-        // Single-Device-Per-Session: Verify this is the active session for the user
-        // Disabled in development to allow multiple devices/tabs
-        const { isDevelopment } = require('../utils/env');
-        if (isDevelopment()) {
-          // Skip single-device check in development
-        } else {
-          const isActive = await isActiveSession(decoded.userId, token);
-          if (!isActive) {
-            return res.status(401).json({ 
-              error: 'Session expired', 
-              message: 'You have logged in from another device. Please log in again.'
-            });
-          }
-        }
-        
-        // Populate session-like context from token data
-        req.session = req.session || {};
-        req.session.userId = decoded.userId;
-        req.session.username = decoded.username;
-        req.session.roles = decoded.roles;
-        req.session.role = decoded.role;
-        req.session.fullName = decoded.fullName;
-        req.session.permissions = decoded.permissions || [];
-        req.session.isJWT = true; // Flag to indicate JWT authentication
-      } else {
-        // If Redis is not available, use decoded token data directly
-        req.session = req.session || {};
-        req.session.userId = decoded.userId;
-        req.session.username = decoded.username;
-        req.session.roles = decoded.roles;
-        req.session.role = decoded.role;
-        req.session.fullName = decoded.fullName;
-        req.session.permissions = decoded.permissions || [];
-        req.session.isJWT = true;
       }
+
+      // JWT is valid — populate session from decoded token
+      req.session = req.session || {};
+      req.session.userId = decoded.userId;
+      req.session.username = decoded.username;
+      req.session.roles = decoded.roles;
+      req.session.role = decoded.role;
+      req.session.fullName = decoded.fullName;
+      req.session.permissions = decoded.permissions || [];
+      req.session.isJWT = true;
       
       return next();
     } catch (error) {

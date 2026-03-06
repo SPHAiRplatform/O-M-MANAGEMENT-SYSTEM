@@ -249,8 +249,10 @@ module.exports = (pool) => {
   router.get('/stats', requireAuth, async (req, res) => {
     try {
       // Only system owners can access platform stats
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can access platform statistics' });
@@ -299,8 +301,10 @@ module.exports = (pool) => {
   router.get('/organizations', requireAuth, async (req, res) => {
     try {
       // Only system owners can list all organizations
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can list organizations' });
@@ -330,8 +334,10 @@ module.exports = (pool) => {
   // Get user statistics for Platform Users page (System Owner only)
   router.get('/users/stats', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can view user statistics' });
@@ -422,8 +428,10 @@ module.exports = (pool) => {
   // Enhanced with advanced filtering
   router.get('/users', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can view all users' });
@@ -697,8 +705,10 @@ module.exports = (pool) => {
   // Get platform analytics (System Owner only)
   router.get('/analytics', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = req.session.roles?.includes('system_owner') ||
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can view platform analytics' });
@@ -962,7 +972,9 @@ module.exports = (pool) => {
   router.get('/activity', requireAuth, async (req, res) => {
     try {
       const isSystemOwner = req.session.roles?.includes('system_owner') ||
-                           req.session.role === 'system_owner';
+                           req.session.roles?.includes('super_admin') ||
+                           req.session.role === 'system_owner' ||
+                           req.session.role === 'super_admin';
 
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can access platform activity' });
