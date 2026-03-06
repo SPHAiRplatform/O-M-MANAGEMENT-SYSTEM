@@ -18,7 +18,8 @@
       "Bash(PGPASSWORD='S0l@r_DB_P@ss_2026!Secure' psql -h localhost -U postgres -d solar_om_db -f server/db/migrations/add_organization_id_to_tracker_cycles.sql)",
       "Bash(npm run build)",
       "Bash(xargs head -200)",
-      "Bash(ls -la /c/Users/mango/OneDrive/Documents/GitHub/SOLAR-MANAGEMENT-SYSTEM/server/db/migrations/*.sql)"
+      "Bash(ls -la /c/Users/mango/OneDrive/Documents/GitHub/SOLAR-MANAGEMENT-SYSTEM/server/db/migrations/*.sql)",
+      "Bash(npm info connect-redis@7 peerDependencies)"
     ]
   }
 }
