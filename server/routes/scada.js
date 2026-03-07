@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, isSuperAdmin } = require('../middleware/auth');
 const { getDb } = require('../middleware/tenantContext');
 
 // Simple encryption for API keys (use a proper KMS in production)
@@ -34,11 +34,8 @@ function decrypt(encryptedText) {
 module.exports = (pool) => {
   const router = express.Router();
 
-  // Helper: check system owner
-  const isSystemOwner = (req) => {
-    return req.session?.roles?.includes('system_owner') ||
-           req.session?.role === 'system_owner';
-  };
+  // Helper: check system owner (delegates to auth middleware helper)
+  const isSystemOwner = (req) => isSuperAdmin(req);
 
   // ========== SCADA CONNECTION MANAGEMENT (System Owner Only) ==========
 

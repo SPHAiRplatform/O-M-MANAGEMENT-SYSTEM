@@ -37,10 +37,7 @@ module.exports = (pool) => {
   router.get('/roles', requireAdmin, async (req, res) => {
     try {
       // Check if current user is system_owner
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner' ||
-                           req.session.roles?.includes('super_admin') ||
-                           req.session.role === 'super_admin';
+      const isSystemOwner = isSuperAdmin(req);
       
       // Use getDb for RLS (though roles table might not have RLS, it's good practice)
       const { getDb } = require('../middleware/tenantContext');
@@ -98,10 +95,7 @@ module.exports = (pool) => {
   router.get('/', requireAdmin, async (req, res) => {
     try {
       // Check if current user is system_owner
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner' ||
-                           req.session.roles?.includes('super_admin') ||
-                           req.session.role === 'super_admin';
+      const isSystemOwner = isSuperAdmin(req);
       
       // Get organization ID from request context
       const { isSystemOwnerWithoutCompany, getOrganizationIdFromRequest } = require('../utils/organizationFilter');
@@ -320,10 +314,7 @@ module.exports = (pool) => {
       const db = getDb(req, pool);
 
       // Check if current user is system_owner
-      const isSystemOwner = req.session.roles?.includes('system_owner') ||
-                           req.session.role === 'system_owner' ||
-                           req.session.roles?.includes('super_admin') ||
-                           req.session.role === 'super_admin';
+      const isSystemOwner = isSuperAdmin(req);
 
       // Check if RBAC tables exist
       const rbacCheck = await db.query(`
@@ -475,10 +466,7 @@ module.exports = (pool) => {
       const userRoles = roles || (role ? [role] : ['technician']);
       const isCreatingSystemOwner = userRoles.includes('system_owner') || userRoles.includes('super_admin');
 
-      const isSystemOwner = req.session.roles?.includes('system_owner') ||
-                           req.session.role === 'system_owner' ||
-                           req.session.roles?.includes('super_admin') ||
-                           req.session.role === 'super_admin';
+      const isSystemOwner = isSuperAdmin(req);
 
       let userOrganizationId = null;
 
@@ -678,10 +666,7 @@ module.exports = (pool) => {
         const mappedRoles = roles.map(r => roleMapping[r] || r);
         
         // Only system_owner can assign system_owner role
-        const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                             req.session.role === 'system_owner' ||
-                             req.session.roles?.includes('super_admin') ||
-                             req.session.role === 'super_admin';
+        const isSystemOwner = isSuperAdmin(req);
         
         if (mappedRoles.includes('system_owner') && !isSystemOwner) {
           return res.status(403).json({ error: 'Only system owner can assign system_owner role' });
@@ -765,10 +750,7 @@ module.exports = (pool) => {
 
       // Handle organization_id update (only system owners can change it)
       if (organization_id !== undefined) {
-        const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                             req.session.role === 'system_owner' ||
-                             req.session.roles?.includes('super_admin') ||
-                             req.session.role === 'super_admin';
+        const isSystemOwner = isSuperAdmin(req);
         
         if (!isSystemOwner) {
           return res.status(403).json({ error: 'Only system owners can change user organization' });

@@ -32,8 +32,7 @@ module.exports = (pool) => {
   router.get('/', requireAuth, async (req, res) => {
     try {
       // Only system owners can list all organizations
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can list organizations' });
@@ -75,8 +74,7 @@ module.exports = (pool) => {
   router.get('/:id', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -119,7 +117,7 @@ module.exports = (pool) => {
   router.get('/current/limits', requireAuth, async (req, res) => {
     try {
       const orgId = req.session.organizationId || req.tenantContext?.organizationId;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       if (!orgId && !isSystemOwner) {
         return res.status(400).json({ error: 'No organization context' });
       }
@@ -180,7 +178,7 @@ module.exports = (pool) => {
   router.get('/current/features', requireAuth, async (req, res) => {
     try {
       const orgId = req.session.organizationId || req.tenantContext?.organizationId;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       if (!orgId && !isSystemOwner) {
         return res.json({ features: {} });
       }
@@ -214,8 +212,7 @@ module.exports = (pool) => {
   // Create new organization (System Owner only)
   router.post('/', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can create organizations' });
@@ -347,8 +344,7 @@ module.exports = (pool) => {
   // Update organization (System Owner only)
   router.put('/:id', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can update organizations' });
@@ -419,8 +415,7 @@ module.exports = (pool) => {
     const client = await pool.connect();
     
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can delete organizations' });
@@ -504,8 +499,7 @@ module.exports = (pool) => {
   router.get('/:id/settings', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -532,8 +526,7 @@ module.exports = (pool) => {
   router.put('/:id/settings', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -584,8 +577,7 @@ module.exports = (pool) => {
   router.get('/:id/features', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -612,8 +604,7 @@ module.exports = (pool) => {
   router.put('/:id/features', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -700,8 +691,7 @@ module.exports = (pool) => {
   router.get('/:id/branding', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -730,8 +720,7 @@ module.exports = (pool) => {
   router.post('/:id/logo', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can upload logos' });
@@ -832,8 +821,7 @@ module.exports = (pool) => {
   router.delete('/:id/logo', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') ||
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
 
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can delete logos' });
@@ -904,8 +892,7 @@ module.exports = (pool) => {
   router.put('/:id/branding', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       const db = getDb(req, pool);
       
@@ -947,8 +934,7 @@ module.exports = (pool) => {
   router.post('/:id/enter', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can enter companies' });
@@ -1001,8 +987,7 @@ module.exports = (pool) => {
   // Exit company (clear selected organization)
   router.post('/exit', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can exit companies' });
@@ -1034,8 +1019,7 @@ module.exports = (pool) => {
   // This endpoint helps verify that organizations have the expected data (or lack thereof)
   router.get('/:id/verify-data', requireAuth, async (req, res) => {
     try {
-      const isSystemOwner = req.session.roles?.includes('system_owner') || 
-                           req.session.role === 'system_owner';
+      const isSystemOwner = isSuperAdmin(req);
       
       if (!isSystemOwner) {
         return res.status(403).json({ error: 'Only system owners can verify organization data' });
