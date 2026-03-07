@@ -3,6 +3,7 @@
  * Usage: node server/scripts/create-superadmin.js
  */
 
+const fs = require('fs');
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 require('dotenv').config({ path: './server/.env' });
@@ -13,6 +14,10 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'solar_maintenance',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: true,
+    ca: fs.readFileSync(process.env.DB_SSL_CA || '/app/certs/ca-certificate.crt', 'utf8')
+  } : false,
 });
 
 async function createSuperAdmin() {
