@@ -406,7 +406,7 @@ if (process.env.DISABLE_RATE_LIMITING !== 'true' && isProduction()) {
 
 // Database connection with connection pooling
 const { getEnvInt } = require('./utils/env');
-const pool = new Pool({
+const poolConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432', 10),
   database: process.env.DB_NAME || 'solar_om_db',
@@ -416,11 +416,15 @@ const pool = new Pool({
   min: getEnvInt('DB_MIN_CONNECTIONS', 2),
   idleTimeoutMillis: getEnvInt('DB_IDLE_TIMEOUT', 30000),
   connectionTimeoutMillis: getEnvInt('DB_CONNECTION_TIMEOUT', 2000),
-  ssl: process.env.DB_SSL === 'true' ? {
-    rejectUnauthorized: true,
-    ca: fs.readFileSync(process.env.DB_SSL_CA || '/app/certs/ca-certificate.crt', 'utf8')
-  } : false,
-});
+};
+// SSL for managed databases (DigitalOcean, AWS RDS, etc.)
+if (process.env.DB_SSL === 'true') {
+  poolConfig.ssl = {
+    rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    ca: process.env.DB_SSL_CA ? require('fs').readFileSync(process.env.DB_SSL_CA, 'utf8') : undefined,
+  };
+}
+const pool = new Pool(poolConfig);
 
 // Optional API token auth (Bearer tok_...)
 const apiTokenAuth = require('./middleware/apiTokenAuth');

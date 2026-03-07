@@ -12,7 +12,8 @@ function getSslConfig() {
   };
 }
 
-// For managed databases (DigitalOcean), connect to 'defaultdb' first (not 'postgres')
+// For managed databases (DigitalOcean, AWS RDS), connect to 'defaultdb' first.
+// For local/Docker postgres, connect to 'postgres'.
 const isManagedDb = process.env.DB_SSL === 'true';
 const initialDb = isManagedDb ? 'defaultdb' : 'postgres';
 
@@ -29,6 +30,9 @@ const pool = new Pool({
 async function setupDatabase() {
   try {
     console.log('Setting up database...');
+    console.log(`  Host: ${process.env.DB_HOST || 'localhost'}`);
+    console.log(`  SSL: ${process.env.DB_SSL === 'true' ? 'enabled' : 'disabled'}`);
+    console.log(`  Initial DB: ${initialDb}`);
 
     // Create database if it doesn't exist
     const dbName = process.env.DB_NAME || 'solar_om_db';
@@ -45,11 +49,11 @@ async function setupDatabase() {
       console.log(`Database '${dbName}' already exists`);
     }
 
-    // Close connection to postgres DB
+    // Close connection to initial DB
     await pool.end();
 
-    // Connect to the new database
-        const appPool = new Pool({
+    // Connect to the app database
+    const appPool = new Pool({
       host: process.env.DB_HOST || 'localhost',
       port: process.env.DB_PORT || 5432,
       database: dbName,

@@ -5,19 +5,28 @@
 
 const fs = require('fs');
 const bcrypt = require('bcrypt');
+const fs = require('fs');
 const { Pool } = require('pg');
 require('dotenv').config({ path: './server/.env' });
+// Also try loading from current dir (when run inside Docker container)
+require('dotenv').config();
+
+// SSL config for managed databases (DigitalOcean, AWS RDS, etc.)
+function getSslConfig() {
+  if (process.env.DB_SSL !== 'true') return undefined;
+  return {
+    rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    ca: process.env.DB_SSL_CA ? fs.readFileSync(process.env.DB_SSL_CA, 'utf8') : undefined,
+  };
+}
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'solar_maintenance',
+  database: process.env.DB_NAME || 'solar_om_db',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  ssl: process.env.DB_SSL === 'true' ? {
-    rejectUnauthorized: true,
-    ca: fs.readFileSync(process.env.DB_SSL_CA || '/app/certs/ca-certificate.crt', 'utf8')
-  } : false,
+  ssl: getSslConfig(),
 });
 
 async function createSuperAdmin() {
