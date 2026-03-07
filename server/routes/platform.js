@@ -1000,7 +1000,7 @@ module.exports = (pool) => {
         ...recentTasks.rows.map(t => ({
           id: t.id,
           type: t.activity_type,
-          title: t.status === 'completed' ? `Task completed: ${t.title}` : `Task updated: ${t.title}`,
+          title: t.status === 'completed' ? `Task completed: ${t.task_code}` : `Task updated: ${t.task_code} (${t.task_type})`,
           organization: t.organization_name,
           user: t.assigned_to_name,
           timestamp: t.updated_at,
