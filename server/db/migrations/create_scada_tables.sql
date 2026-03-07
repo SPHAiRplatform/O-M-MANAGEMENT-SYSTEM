@@ -6,15 +6,15 @@ CREATE TABLE IF NOT EXISTS scada_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
-  provider VARCHAR(100) DEFAULT 'custom', -- 'huawei', 'sma', 'solaredge', 'custom'
+  provider VARCHAR(100) DEFAULT 'custom',
   base_url TEXT NOT NULL,
-  api_key_encrypted TEXT, -- stored encrypted
-  auth_type VARCHAR(50) DEFAULT 'api_key', -- 'api_key', 'oauth2', 'basic'
-  auth_config JSONB DEFAULT '{}', -- additional auth params (headers, tokens, etc.)
+  api_key_encrypted TEXT,
+  auth_type VARCHAR(50) DEFAULT 'api_key',
+  auth_config JSONB DEFAULT '{}',
   poll_interval_minutes INTEGER DEFAULT 5 CHECK (poll_interval_minutes >= 1 AND poll_interval_minutes <= 1440),
-  field_mapping JSONB DEFAULT '{}', -- maps SCADA fields to platform fields
+  field_mapping JSONB DEFAULT '{}',
   is_active BOOLEAN DEFAULT true,
-  status VARCHAR(20) DEFAULT 'disconnected', -- 'connected', 'disconnected', 'error'
+  status VARCHAR(20) DEFAULT 'disconnected',
   last_sync_at TIMESTAMP,
   last_error TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS scada_data (
   connection_id UUID NOT NULL REFERENCES scada_connections(id) ON DELETE CASCADE,
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   timestamp TIMESTAMP NOT NULL,
-  data_type VARCHAR(100) NOT NULL, -- 'power', 'energy', 'irradiance', 'temperature', 'inverter_status'
-  device_id VARCHAR(255), -- inverter ID, weather station ID, etc.
+  data_type VARCHAR(100) NOT NULL,
+  device_id VARCHAR(255),
   value NUMERIC,
-  unit VARCHAR(20), -- 'kW', 'kWh', 'W/m2', 'C', etc.
+  unit VARCHAR(20),
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -67,7 +67,8 @@ ALTER TABLE scada_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scada_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scada_alarms ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies (same pattern as other tables)
+-- RLS Policies with DROP IF EXISTS to prevent errors on re-run
+DROP POLICY IF EXISTS scada_connections_organization_isolation ON scada_connections;
 CREATE POLICY scada_connections_organization_isolation ON scada_connections
   USING (
     organization_id = COALESCE(
@@ -77,6 +78,7 @@ CREATE POLICY scada_connections_organization_isolation ON scada_connections
     OR current_setting('app.current_user_role', true) = 'system_owner'
   );
 
+DROP POLICY IF EXISTS scada_data_organization_isolation ON scada_data;
 CREATE POLICY scada_data_organization_isolation ON scada_data
   USING (
     organization_id = COALESCE(
@@ -86,6 +88,7 @@ CREATE POLICY scada_data_organization_isolation ON scada_data
     OR current_setting('app.current_user_role', true) = 'system_owner'
   );
 
+DROP POLICY IF EXISTS scada_alarms_organization_isolation ON scada_alarms;
 CREATE POLICY scada_alarms_organization_isolation ON scada_alarms
   USING (
     organization_id = COALESCE(

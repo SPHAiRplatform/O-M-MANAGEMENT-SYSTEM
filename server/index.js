@@ -412,10 +412,14 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'solar_om_db',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  max: getEnvInt('DB_MAX_CONNECTIONS', 20), // Maximum number of clients in the pool
-  min: getEnvInt('DB_MIN_CONNECTIONS', 2), // Minimum number of clients in the pool
-  idleTimeoutMillis: getEnvInt('DB_IDLE_TIMEOUT', 30000), // Close idle clients after 30 seconds
-  connectionTimeoutMillis: getEnvInt('DB_CONNECTION_TIMEOUT', 2000), // Return an error after 2 seconds if connection could not be established
+  max: getEnvInt('DB_MAX_CONNECTIONS', 20),
+  min: getEnvInt('DB_MIN_CONNECTIONS', 2),
+  idleTimeoutMillis: getEnvInt('DB_IDLE_TIMEOUT', 30000),
+  connectionTimeoutMillis: getEnvInt('DB_CONNECTION_TIMEOUT', 2000),
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: true,
+    ca: fs.readFileSync(process.env.DB_SSL_CA || '/app/certs/ca-certificate.crt', 'utf8')
+  } : false,
 });
 
 // Optional API token auth (Bearer tok_...)
@@ -476,7 +480,11 @@ pool.query('SELECT NOW()', (err, res) => {
     logger.error('Database connection error', { error: err.message });
   } else {
     logger.info('Database connected successfully', { 
-      host: process.env.DB_HOST, 
+      host: process.env.DB_HOST,
+      ssl: process.env.DB_SSL === 'true' ? {
+        rejectUnauthorized: true,
+        ca: fs.readFileSync(process.env.DB_SSL_CA || '/app/certs/ca-certificate.crt', 'utf8')
+      } : false, 
       database: process.env.DB_NAME,
       maxConnections: pool.totalCount 
     });

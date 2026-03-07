@@ -3,13 +3,28 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
+// SSL config for managed databases (DigitalOcean, AWS RDS, etc.)
+function getSslConfig() {
+  if (process.env.DB_SSL !== 'true') return undefined;
+  return {
+    rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    ca: process.env.DB_SSL_CA ? fs.readFileSync(process.env.DB_SSL_CA, 'utf8') : undefined,
+  };
+}
+
+// For managed databases (DigitalOcean), connect to 'defaultdb' first (not 'postgres')
+const isManagedDb = process.env.DB_SSL === 'true';
+const initialDb = isManagedDb ? 'defaultdb' : 'postgres';
+
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: 'postgres', // Connect to default postgres DB first
+  database: initialDb,
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
+  ssl: getSslConfig(),
 });
+
 
 async function setupDatabase() {
   try {
@@ -34,12 +49,13 @@ async function setupDatabase() {
     await pool.end();
 
     // Connect to the new database
-    const appPool = new Pool({
+        const appPool = new Pool({
       host: process.env.DB_HOST || 'localhost',
       port: process.env.DB_PORT || 5432,
       database: dbName,
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
+      ssl: getSslConfig(),
     });
 
     // Read and execute schema
@@ -131,6 +147,7 @@ async function setupDatabase() {
       'add_profile_image_to_users.sql',
       'add_password_changed_column.sql',
       'add_multiple_roles_support.sql',        // Adds roles JSONB column
+      'add_inventory.sql',
       'add_role_system_and_spare_requests.sql', // Adds super_admin role support + spare requests
       'fix_user_roles_migration.sql',           // Fixes roles column from role column
       'add_password_reset_columns.sql',
@@ -139,7 +156,6 @@ async function setupDatabase() {
       // API & integrations
       'add_api_tokens_and_webhooks.sql',
       // Features
-      'add_inventory.sql',
       'add_feedback_table.sql',
       'create_calendar_events_table.sql',
       'create_licenses_table.sql',
@@ -163,12 +179,6 @@ async function setupDatabase() {
       'create_tracker_cycles.sql',
       'create_tracker_status_requests.sql',
       'wipe_tracker_status_requests.sql',
-      // Multi-tenant phase 2: RLS policies & data migration
-      'multi_tenant_004_implement_rls_policies.sql',
-      'multi_tenant_007_migrate_existing_data_to_smart_innovations_energy.sql',
-      'multi_tenant_008_add_default_configurations.sql',
-      'multi_tenant_009_update_other_orgs_colors.sql',
-      'multi_tenant_010_update_display_names_to_om_format.sql',
       // Organization ID consistency (depends on tables above existing)
       'add_organization_id_to_tracker_cycles.sql',
       'allow_null_organization_id_for_system_users.sql',
@@ -176,6 +186,12 @@ async function setupDatabase() {
       'allow_null_organization_id_in_plant_map_structure.sql',
       'standardize_organization_id_null_handling.sql',
       'assign_existing_users_to_organizations.sql',
+      // Multi-tenant phase 2: RLS policies & data migration
+      'multi_tenant_004_implement_rls_policies.sql',
+      'multi_tenant_007_migrate_existing_data_to_smart_innovations_energy.sql',
+      'multi_tenant_008_add_default_configurations.sql',
+      'multi_tenant_009_update_other_orgs_colors.sql',
+      'multi_tenant_010_update_display_names_to_om_format.sql',
       // Branding
       'add_site_map_name_to_organization_branding.sql',
       // Performance optimizations (must run after RLS policies)
@@ -625,7 +641,7 @@ async function seedInitialData(pool) {
       $3::jsonb,
       $4
     )
-    ON CONFLICT (template_code) DO UPDATE SET
+    ON CONFLICT (template_code, template_name) DO UPDATE SET
       checklist_structure = EXCLUDED.checklist_structure,
       validation_rules = EXCLUDED.validation_rules,
       cm_generation_rules = EXCLUDED.cm_generation_rules,
@@ -778,7 +794,7 @@ async function seedInitialData(pool) {
       $3::jsonb,
       $4
     )
-    ON CONFLICT (template_code) DO UPDATE SET
+    ON CONFLICT (template_code, template_name) DO UPDATE SET
       checklist_structure = EXCLUDED.checklist_structure,
       validation_rules = EXCLUDED.validation_rules,
       cm_generation_rules = EXCLUDED.cm_generation_rules,
