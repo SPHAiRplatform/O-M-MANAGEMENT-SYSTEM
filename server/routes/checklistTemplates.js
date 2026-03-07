@@ -237,13 +237,20 @@ module.exports = (pool) => {
           );
         } else {
           // Create new template
+          const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
+          const organizationId = getOrganizationIdFromRequest(req);
+          if (!organizationId) {
+            fs.unlinkSync(filePath);
+            return res.status(400).json({ error: 'Organization context is required to create templates' });
+          }
           result = await db.query(
-            `INSERT INTO checklist_templates 
-             (template_code, template_name, description, asset_type, task_type, frequency, 
+            `INSERT INTO checklist_templates
+             (organization_id, template_code, template_name, description, asset_type, task_type, frequency,
               checklist_structure, validation_rules, cm_generation_rules)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb)
              RETURNING *`,
             [
+              organizationId,
               templateData.template_code,
               templateData.template_name,
               templateData.description,
@@ -288,6 +295,12 @@ module.exports = (pool) => {
   router.post('/', requireAuth, requirePermission('templates:create'), async (req, res) => {
     try {
       const db = getDb(req, pool);
+      const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
+      const organizationId = getOrganizationIdFromRequest(req);
+      if (!organizationId) {
+        return res.status(400).json({ error: 'Organization context is required to create templates' });
+      }
+
       const {
         template_code,
         template_name,
@@ -302,10 +315,11 @@ module.exports = (pool) => {
 
       const result = await db.query(
         `INSERT INTO checklist_templates (
-          template_code, template_name, description, asset_type, task_type, frequency,
+          organization_id, template_code, template_name, description, asset_type, task_type, frequency,
           checklist_structure, validation_rules, cm_generation_rules
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb) RETURNING *`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb) RETURNING *`,
         [
+          organizationId,
           template_code,
           template_name,
           description,

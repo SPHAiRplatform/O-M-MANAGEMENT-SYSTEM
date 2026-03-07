@@ -962,12 +962,22 @@ module.exports = (pool) => {
       req.session.selectedOrganizationName = org.name;
       req.session.selectedOrganizationSlug = org.slug;
       logAudit(pool, req, { action: AUDIT_ACTIONS.ORG_ENTERED, entityType: AUDIT_ENTITY_TYPES.ORGANIZATION, entityId: id, details: { organization_name: org.name } }).catch(() => {});
+
+      // Also store in Redis so org context persists across JWT-authenticated requests
+      // (session cookies don't persist in production behind Cloudflare/reverse proxy)
+      const { storeUserOrgContext } = require('../utils/redis');
+      storeUserOrgContext(req.session.userId, {
+        organizationId: id,
+        organizationName: org.name,
+        organizationSlug: org.slug
+      }).catch(err => console.error('Error storing org context in Redis:', err));
+
       req.session.save((err) => {
         if (err) {
           console.error('Error saving session:', err);
           return res.status(500).json({ error: 'Failed to save session' });
         }
-        
+
         res.json({
           success: true,
           organization: {
@@ -998,6 +1008,10 @@ module.exports = (pool) => {
       req.session.selectedOrganizationId = null;
       req.session.selectedOrganizationName = null;
       req.session.selectedOrganizationSlug = null;
+
+      // Clear org context from Redis too
+      const { clearUserOrgContext } = require('../utils/redis');
+      clearUserOrgContext(req.session.userId).catch(err => console.error('Error clearing org context in Redis:', err));
       req.session.save((err) => {
         if (err) {
           console.error('Error saving session:', err);

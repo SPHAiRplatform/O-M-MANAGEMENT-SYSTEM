@@ -71,8 +71,8 @@ app.get('/uploads/companies/:slug/:fileType/:filename', (req, res) => {
     return res.status(400).send('Invalid file type');
   }
   
-  // Sanitize slug to prevent directory traversal
-  const sanitizedSlug = slug.replace(/[^a-z0-9_-]/g, '').toLowerCase();
+  // Sanitize slug to prevent directory traversal (must match organizationStorage.js sanitizeSlug)
+  const sanitizedSlug = slug.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/--+/g, '-').replace(/^-|-$/g, '');
   const filePath = path.join(__dirname, 'uploads', 'companies', sanitizedSlug, fileType, filename);
   
   // Security check: prevent directory traversal
@@ -426,7 +426,7 @@ app.use(apiTokenAuth(pool));
 // populate req.session from the JWT payload so auth-gated endpoints work in production
 // (e.g. when secure cookies can't be sent over HTTP behind a reverse proxy)
 const { verifyToken, extractToken } = require('./utils/jwt');
-const { getTokenData } = require('./utils/redis');
+const { getTokenData, getUserOrgContext } = require('./utils/redis');
 app.use(async (req, res, next) => {
   // Skip if session already has a userId (cookie-based session is working)
   if (req.session && req.session.userId) return next();
@@ -450,6 +450,19 @@ app.use(async (req, res, next) => {
     req.session.fullName = redisData?.fullName || decoded.fullName;
     req.session.permissions = redisData?.permissions || decoded.permissions || [];
     req.session._fromJwt = true; // Flag for debugging
+
+    // Restore selected organization context from Redis for system owners
+    // (session cookies don't persist in production behind Cloudflare/reverse proxy)
+    const roles = req.session.roles || [];
+    const isSysOwner = roles.includes('system_owner') || roles.includes('super_admin');
+    if (isSysOwner && !req.session.selectedOrganizationId) {
+      const orgContext = await getUserOrgContext(decoded.userId);
+      if (orgContext) {
+        req.session.selectedOrganizationId = orgContext.organizationId;
+        req.session.selectedOrganizationName = orgContext.organizationName;
+        req.session.selectedOrganizationSlug = orgContext.organizationSlug;
+      }
+    }
   } catch (err) {
     // Token invalid/expired — continue unauthenticated
     logger.debug('JWT auth fallback: token invalid', { error: err.message });

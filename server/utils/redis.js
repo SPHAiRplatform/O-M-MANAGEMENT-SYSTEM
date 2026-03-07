@@ -274,6 +274,55 @@ async function isActiveSession(userId, token) {
 }
 
 /**
+ * Store selected organization for a system owner (persists across JWT requests)
+ * @param {string} userId - User ID
+ * @param {Object} orgData - { organizationId, organizationName, organizationSlug }
+ * @param {number} ttlSeconds - Time to live in seconds (default: 24 hours)
+ * @returns {Promise<void>}
+ */
+async function storeUserOrgContext(userId, orgData, ttlSeconds = 86400) {
+  if (!isRedisAvailable()) return;
+  try {
+    const key = `user:org:${userId}`;
+    await redisClient.setEx(key, ttlSeconds, JSON.stringify(orgData));
+  } catch (error) {
+    logger.error('[REDIS] Error storing user org context', { error: error.message, userId });
+  }
+}
+
+/**
+ * Get selected organization for a system owner
+ * @param {string} userId - User ID
+ * @returns {Promise<Object|null>} { organizationId, organizationName, organizationSlug } or null
+ */
+async function getUserOrgContext(userId) {
+  if (!isRedisAvailable()) return null;
+  try {
+    const key = `user:org:${userId}`;
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error('[REDIS] Error getting user org context', { error: error.message, userId });
+    return null;
+  }
+}
+
+/**
+ * Clear selected organization for a system owner
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+async function clearUserOrgContext(userId) {
+  if (!isRedisAvailable()) return;
+  try {
+    const key = `user:org:${userId}`;
+    await redisClient.del(key);
+  } catch (error) {
+    logger.error('[REDIS] Error clearing user org context', { error: error.message, userId });
+  }
+}
+
+/**
  * Close Redis connection
  * @returns {Promise<void>}
  */
@@ -301,5 +350,8 @@ module.exports = {
   getUserSession,
   deleteUserSession,
   isActiveSession,
+  storeUserOrgContext,
+  getUserOrgContext,
+  clearUserOrgContext,
   closeRedis
 };
