@@ -53,6 +53,9 @@ services:
       DB_NAME: ${DB_NAME:-solar_om_db}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SSL: ${DB_SSL:-}
+      DB_SSL_CA: ${DB_SSL_CA:-}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-}
       REDIS_ENABLED: "true"
       REDIS_URL: redis://redis:6379
       TRUST_PROXY: "true"
@@ -61,11 +64,15 @@ services:
       PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN}
       PLATFORM_UPDATE_IPS: ${PLATFORM_UPDATE_IPS:-}
       DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD}
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
     volumes:
       - ./server/uploads:/app/uploads
       - ./server/logs:/app/logs
       - ./server/backups:/app/backups
+      - ./certs:/app/certs:ro
     ports:
       - "${PORT:-3001}:3001"
     depends_on:
