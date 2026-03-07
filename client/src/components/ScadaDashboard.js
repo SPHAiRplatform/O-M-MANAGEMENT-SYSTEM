@@ -19,7 +19,7 @@ function ScadaDashboard() {
       const [summaryRes, alarmsRes, timeseriesRes] = await Promise.all([
         authFetch(`${getApiBaseUrl()}/scada/data/summary`),
         authFetch(`${getApiBaseUrl()}/scada/alarms?status=active&limit=20`),
-        authFetch(`${getApiBaseUrl()}/scada/data/timeseries?type=power&range=${timeRange}`)
+        authFetch(`${getApiBaseUrl()}/scada/data/timeseries?data_type=power&period=${timeRange === '24h' ? 'day' : timeRange === '7d' ? 'week' : 'month'}`)
       ]);
 
       if (summaryRes.ok) {
@@ -58,15 +58,17 @@ function ScadaDashboard() {
   }, [loadData, autoRefresh]);
 
   const formatPower = (value) => {
-    if (value === null || value === undefined) return '--';
-    if (value >= 1000) return `${(value / 1000).toFixed(1)} MW`;
-    return `${value.toFixed(1)} kW`;
+    const num = Number(value);
+    if (value === null || value === undefined || isNaN(num)) return '--';
+    if (num >= 1000) return `${(num / 1000).toFixed(1)} MW`;
+    return `${num.toFixed(1)} kW`;
   };
 
   const formatEnergy = (value) => {
-    if (value === null || value === undefined) return '--';
-    if (value >= 1000) return `${(value / 1000).toFixed(1)} MWh`;
-    return `${value.toFixed(1)} kWh`;
+    const num = Number(value);
+    if (value === null || value === undefined || isNaN(num)) return '--';
+    if (num >= 1000) return `${(num / 1000).toFixed(1)} MWh`;
+    return `${num.toFixed(1)} kWh`;
   };
 
   const getSeverityClass = (severity) => {
@@ -181,7 +183,7 @@ function ScadaDashboard() {
               <div className="kpi-icon"><i className="bi bi-sun-fill"></i></div>
               <div className="kpi-content">
                 <span className="kpi-label">Today's Yield</span>
-                <span className="kpi-value">{formatEnergy(summary.todayEnergy)}</span>
+                <span className="kpi-value">{formatEnergy(summary.todayEnergy?.value)}</span>
               </div>
             </div>
 
@@ -266,11 +268,11 @@ function ScadaDashboard() {
                     <div
                       key={index}
                       className={`inverter-item inverter-${inv.status || 'unknown'}`}
-                      title={`${inv.device_id}: ${inv.status} - ${formatPower(inv.value)}`}
+                      title={`${inv.deviceId}: ${inv.status}`}
                     >
                       <i className="bi bi-cpu"></i>
-                      <span className="inverter-id">{inv.device_id || `INV-${index + 1}`}</span>
-                      <span className="inverter-power">{formatPower(inv.value)}</span>
+                      <span className="inverter-id">{inv.deviceId || `INV-${index + 1}`}</span>
+                      <span className={`inverter-status-label inverter-${inv.status}`}>{inv.status}</span>
                     </div>
                   ))}
                 </div>
