@@ -110,31 +110,77 @@ async function setupDatabase() {
       END $$;
     `);
 
-    // Run other migrations
+    // Run other migrations (order matters — dependencies noted in comments)
     const migrations = [
+      // Platform tables
       'create_platform_migrations_table.sql',
       'create_platform_updates_table.sql',
       'create_platform_settings_table.sql',
+      // Task/checklist enhancements
       'add_pm_performed_by_to_cm_tasks.sql',
       'add_task_metadata.sql',
       'add_draft_responses.sql',
       'add_draft_images.sql',
       'add_draft_spares_used.sql',
+      'add_location_to_tasks.sql',
+      'add_unplanned_cm_fields.sql',
+      'allow_duplicate_pm_codes.sql',
+      'update_cm_task_types_to_short_names.sql',
+      // User auth & roles
       'add_password_to_users.sql',
-      'add_profile_image_to_users.sql', // Add profile_image column
-      'add_password_changed_column.sql', // Add password_changed column
-      'add_multiple_roles_support.sql', // Add roles column (must be before auth queries)
+      'add_profile_image_to_users.sql',
+      'add_password_changed_column.sql',
+      'add_multiple_roles_support.sql',        // Adds roles JSONB column
+      'add_role_system_and_spare_requests.sql', // Adds super_admin role support + spare requests
+      'fix_user_roles_migration.sql',           // Fixes roles column from role column
+      'add_password_reset_columns.sql',
+      // RBAC system (depends on roles support)
+      'create_rbac_system.sql',
+      // API & integrations
       'add_api_tokens_and_webhooks.sql',
+      // Features
       'add_inventory.sql',
+      'add_feedback_table.sql',
       'create_calendar_events_table.sql',
       'create_licenses_table.sql',
+      'add_multi_tenant_license_fields.sql',
+      'drop_licenses_table.sql',               // Removes licenses (replaced by tenant config)
       'add_task_pause_resume.sql',
       'add_overtime_requests.sql',
       'add_spares_used_to_tasks_and_responses.sql',
       'add_fault_log_fields_to_cm_letters.sql',
-      'add_hours_tracking_and_notifications.sql', // Must run before add_multiple_task_assignments (adds assigned_at to tasks)
-      'add_multiple_task_assignments.sql', // Depends on assigned_at column from add_hours_tracking_and_notifications
-      'add_password_reset_columns.sql'
+      'add_hours_tracking_and_notifications.sql', // Adds assigned_at to tasks + notifications table
+      'add_multiple_task_assignments.sql',         // Depends on assigned_at from above
+      'add_notification_idempotency_key.sql',
+      'add_notifications_unique_constraint.sql',
+      // Audit log
+      'create_audit_log.sql',
+      'audit_log_org_created_index.sql',
+      // Plant map & SCADA
+      'create_plant_map_structure.sql',
+      'create_scada_tables.sql',
+      // Tracker system
+      'create_tracker_cycles.sql',
+      'create_tracker_status_requests.sql',
+      'wipe_tracker_status_requests.sql',
+      // Multi-tenant phase 2: RLS policies & data migration
+      'multi_tenant_004_implement_rls_policies.sql',
+      'multi_tenant_007_migrate_existing_data_to_smart_innovations_energy.sql',
+      'multi_tenant_008_add_default_configurations.sql',
+      'multi_tenant_009_update_other_orgs_colors.sql',
+      'multi_tenant_010_update_display_names_to_om_format.sql',
+      // Organization ID consistency (depends on tables above existing)
+      'add_organization_id_to_tracker_cycles.sql',
+      'allow_null_organization_id_for_system_users.sql',
+      'allow_null_organization_id_in_notifications.sql',
+      'allow_null_organization_id_in_plant_map_structure.sql',
+      'standardize_organization_id_null_handling.sql',
+      'assign_existing_users_to_organizations.sql',
+      // Branding
+      'add_site_map_name_to_organization_branding.sql',
+      // Performance optimizations (must run after RLS policies)
+      'optimize_rls_policies.sql',
+      'add_performance_indexes.sql',
     ];
     
     for (const migrationFile of migrations) {

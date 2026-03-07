@@ -34,7 +34,7 @@ COPY server/ ./
 COPY --from=frontend-builder /app/client/build ./public
 
 # Create necessary directories
-RUN mkdir -p uploads/profiles logs backups
+RUN mkdir -p uploads/profiles uploads/companies logs backups
 
 # Expose port
 EXPOSE 3001
