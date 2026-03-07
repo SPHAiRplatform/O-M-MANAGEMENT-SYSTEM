@@ -41,6 +41,9 @@ Thumbs.db
 # Database dumps (backup files)
 scripts/database-dump/
 *.backup
+*_backup.sql
+*_backup.zip
+solar_om_db_*.sql
 
 # Build outputs
 server/public/

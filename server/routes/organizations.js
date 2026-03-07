@@ -1069,7 +1069,7 @@ module.exports = (pool) => {
         const usersResult = await db.query(
           `SELECT COUNT(*) as count FROM users
            WHERE organization_id = $1
-           AND (role != 'system_owner' OR role IS NULL)`,
+           AND (role NOT IN ('system_owner', 'super_admin') OR role IS NULL)`,
           [id]
         );
         dataCounts.users = parseInt(usersResult.rows[0]?.count || 0);

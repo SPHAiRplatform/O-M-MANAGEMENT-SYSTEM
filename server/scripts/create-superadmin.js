@@ -3,7 +3,6 @@
  * Usage: node server/scripts/create-superadmin.js
  */
 
-const fs = require('fs');
 const bcrypt = require('bcrypt');
 const fs = require('fs');
 const { Pool } = require('pg');
