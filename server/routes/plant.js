@@ -1,8 +1,9 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { parsePlantMap } = require('../utils/plantMapParser');
-const { requireAuth, requireAdmin, isAdmin, isSuperAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, isAdmin, isSuperAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { requireFeature } = require('../middleware/requireFeature');
 const { createNotification } = require('../utils/notifications');
 const { getCompanySubDir, getOrganizationSlugFromRequest, getOrganizationIdFromRequest } = require('../utils/organizationStorage');
@@ -1692,6 +1693,76 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('[PLANT] Error getting cycle stats:', error);
       res.status(500).json({ error: 'Failed to get cycle statistics', details: error.message });
+    }
+  });
+
+  // Upload plant map Excel file (system owner only)
+  // Saves to company plant folder and parses into map structure
+  const plantUpload = multer({
+    storage: multer.diskStorage({
+      destination: async (req, file, cb) => {
+        try {
+          const slug = await getOrganizationSlugFromRequest(req, pool);
+          const plantDir = getCompanySubDir(slug, 'plant');
+          if (!fs.existsSync(plantDir)) fs.mkdirSync(plantDir, { recursive: true });
+          cb(null, plantDir);
+        } catch (err) {
+          cb(err);
+        }
+      },
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `plant-map${ext}`);
+      }
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const allowed = /xlsx|xls|csv/;
+      const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+      if (allowed.test(ext)) return cb(null, true);
+      cb(new Error('Only Excel (.xlsx, .xls) or CSV files are allowed'));
+    }
+  });
+
+  router.post('/upload-map', requireAuth, requireSuperAdmin, plantUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const slug = await getOrganizationSlugFromRequest(req, pool);
+      if (!slug) {
+        return res.status(400).json({ error: 'Please select a company first' });
+      }
+
+      // Try to parse the uploaded Excel into map structure
+      let structure = [];
+      try {
+        const parsed = parsePlantMap(req.file.path);
+        if (parsed && parsed.length > 0) {
+          structure = parsed;
+        }
+      } catch (parseError) {
+        console.log('[PLANT] Could not auto-parse map structure from upload:', parseError.message);
+        // File is still saved — user can use the Builder to create structure manually
+      }
+
+      // If we got structure, save it as map-structure.json
+      if (structure.length > 0) {
+        const organizationId = getOrganizationIdFromRequest(req);
+        await saveMapStructureToFile(req, structure, 1, organizationId);
+      }
+
+      res.json({
+        message: 'Plant map uploaded successfully',
+        file: req.file.originalname,
+        size: req.file.size,
+        trackersFound: structure.length,
+        path: req.file.path
+      });
+    } catch (error) {
+      console.error('[PLANT] Error uploading plant map:', error);
+      res.status(500).json({ error: 'Failed to upload plant map' });
     }
   });
 

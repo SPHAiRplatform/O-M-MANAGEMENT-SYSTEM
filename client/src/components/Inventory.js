@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getInventoryItems, adjustInventory, downloadInventoryExcel, getSparesUsage, createInventoryItem, updateInventoryItem } from '../api/api';
+import { getInventoryItems, adjustInventory, downloadInventoryExcel, getSparesUsage, createInventoryItem, updateInventoryItem, uploadInventoryList } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
 import './Inventory.css';
 
 function Inventory() {
-  const { isAdmin, user, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, user, loading: authLoading } = useAuth();
   const [items, setItems] = useState([]);
   const [q, setQ] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
@@ -41,6 +41,38 @@ function Inventory() {
     part_type: '',
     min_level: 0
   });
+  const [uploadingInventory, setUploadingInventory] = useState(false);
+  const inventoryFileInputRef = useRef(null);
+
+  const handleInventoryUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['xlsx', 'xls'].includes(ext)) {
+      setAlertError({ message: 'Invalid file type. Please upload an Excel (.xlsx, .xls) file.' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAlertError({ message: 'File too large. Maximum size is 10MB.' });
+      return;
+    }
+
+    try {
+      setUploadingInventory(true);
+      setAlertError(null);
+      const result = await uploadInventoryList(file);
+      setAlertSuccess({ message: `Inventory uploaded: ${result.imported} items imported${result.skipped ? `, ${result.skipped} skipped` : ''}.` });
+      // Reload inventory data
+      const resp = await getInventoryItems({ q: q || undefined, low_stock: lowOnly ? 'true' : undefined });
+      setItems(resp.data || []);
+    } catch (err) {
+      setAlertError({ message: 'Upload failed: ' + (err.message || 'Unknown error') });
+    } finally {
+      setUploadingInventory(false);
+    }
+  };
 
   const load = useCallback(async (searchQuery, lowStockFilter) => {
     try {
@@ -243,19 +275,40 @@ function Inventory() {
           </div>
           {isAdmin() && viewMode === 'inventory' && (
             <>
-              <button 
-                className="btn btn-sm btn-primary" 
+              <button
+                className="btn btn-sm btn-primary"
                 onClick={() => setShowAddModal(true)}
                 style={{ padding: '5px 10px', fontSize: '12px' }}
               >
                 + Add
               </button>
-              <button 
-                className="btn btn-sm btn-primary" 
+              <button
+                className="btn btn-sm btn-primary"
                 onClick={handleDownload}
                 style={{ padding: '5px 10px', fontSize: '12px' }}
               >
                 ↓ Export
+              </button>
+            </>
+          )}
+          {isSuperAdmin() && viewMode === 'inventory' && (
+            <>
+              <input
+                ref={inventoryFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: 'none' }}
+                onChange={handleInventoryUpload}
+              />
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => inventoryFileInputRef.current?.click()}
+                disabled={uploadingInventory}
+                style={{ padding: '5px 10px', fontSize: '12px' }}
+                title="Upload inventory Excel file"
+              >
+                <i className="bi bi-upload"></i>{' '}
+                {uploadingInventory ? 'Uploading...' : 'Upload'}
               </button>
             </>
           )}

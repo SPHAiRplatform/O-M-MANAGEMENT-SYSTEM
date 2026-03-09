@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getPlantMapStructure, savePlantMapStructure, submitTrackerStatusRequest, getCycleInfo, resetCycle, clearCycleToZero } from '../api/api';
+import { getPlantMapStructure, savePlantMapStructure, submitTrackerStatusRequest, getCycleInfo, resetCycle, clearCycleToZero, uploadPlantMap } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { hasOrganizationContext, isSystemOwnerWithoutCompany } from '../utils/organizationContext';
 import { generatePlantMapReport } from '../utils/plantMapReport';
@@ -151,6 +151,8 @@ function Plant() {
   const [alertInfo, setAlertInfo] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [builderMode, setBuilderMode] = useState(false);
+  const [uploadingMap, setUploadingMap] = useState(false);
+  const plantFileInputRef = useRef(null);
   // Custom labels per organization (stored in map-structure.json)
   const [plantLabels, setPlantLabels] = useState({
     trackerName: 'Trackers',
@@ -706,6 +708,36 @@ function Plant() {
     }
   }, [mapContainerRef, statistics, viewMode, downloading, currentCycle, cycleLoading]);
 
+  const handlePlantMapUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+      setAlertError({ message: 'Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file.' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAlertError({ message: 'File too large. Maximum size is 10MB.' });
+      return;
+    }
+
+    try {
+      setUploadingMap(true);
+      setAlertError(null);
+      const result = await uploadPlantMap(file);
+      setAlertSuccess({ message: `Plant map uploaded successfully. ${result.trackersFound || 0} trackers found.` });
+      // Reload map data
+      hasLoadedRef.current = false;
+      loadMapStructure(true);
+    } catch (err) {
+      setAlertError({ message: 'Upload failed: ' + (err.message || 'Unknown error') });
+    } finally {
+      setUploadingMap(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="plant-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
@@ -900,15 +932,34 @@ function Plant() {
               </button>
 
               {hasAnyRole('system_owner') && (
-                <button
-                  onClick={() => setBuilderMode(!builderMode)}
-                  className={builderMode ? 'btn btn-danger' : 'btn btn-secondary'}
-                  style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 'bold' }}
-                  title="Visual map builder to create and edit sitemap layouts"
-                >
-                  <i className={`bi ${builderMode ? 'bi-x-lg' : 'bi-grid-3x3-gap'}`}></i>{' '}
-                  {builderMode ? 'Exit' : 'Builder'}
-                </button>
+                <>
+                  <input
+                    ref={plantFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    style={{ display: 'none' }}
+                    onChange={handlePlantMapUpload}
+                  />
+                  <button
+                    onClick={() => plantFileInputRef.current?.click()}
+                    className="btn btn-secondary"
+                    disabled={uploadingMap}
+                    style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 'bold' }}
+                    title="Upload plant map Excel file"
+                  >
+                    <i className="bi bi-upload"></i>{' '}
+                    {uploadingMap ? 'Uploading...' : 'Upload'}
+                  </button>
+                  <button
+                    onClick={() => setBuilderMode(!builderMode)}
+                    className={builderMode ? 'btn btn-danger' : 'btn btn-secondary'}
+                    style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 'bold' }}
+                    title="Visual map builder to create and edit sitemap layouts"
+                  >
+                    <i className={`bi ${builderMode ? 'bi-x-lg' : 'bi-grid-3x3-gap'}`}></i>{' '}
+                    {builderMode ? 'Exit' : 'Builder'}
+                  </button>
+                </>
               )}
             </div>
 

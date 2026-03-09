@@ -1,8 +1,9 @@
 const express = require('express');
-const { requireAuth, requireAdmin, isTechnician } = require('../middleware/auth');
+const { requireAuth, requireAdmin, isTechnician, requireSuperAdmin } = require('../middleware/auth');
 const { requireFeature } = require('../middleware/requireFeature');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const { parseInventoryFromExcel, updateActualQtyInExcel, updateInventoryItemInExcel, exportInventoryToExcel, DEFAULT_INVENTORY_XLSX } = require('../utils/inventoryExcelSync');
 const { v4: uuidv4 } = require('uuid');
 const {
@@ -602,6 +603,81 @@ module.exports = (pool) => {
     } catch (e) {
       console.error('[INVENTORY] Error in GET /usage:', e);
       res.status(500).json({ error: 'Service unavailable' });
+    }
+  });
+
+  // Upload inventory Excel file (system owner only)
+  // Saves to company inventory folder and syncs items to database
+  const inventoryUpload = multer({
+    storage: multer.diskStorage({
+      destination: async (req, file, cb) => {
+        try {
+          const slug = await getOrganizationSlugFromRequest(req, pool);
+          const inventoryDir = getStoragePath(slug, 'inventory');
+          if (!fs.existsSync(inventoryDir)) fs.mkdirSync(inventoryDir, { recursive: true });
+          cb(null, inventoryDir);
+        } catch (err) {
+          cb(err);
+        }
+      },
+      filename: (req, file, cb) => {
+        cb(null, 'Inventory Count.xlsx');
+      }
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (ext === '.xlsx' || ext === '.xls') return cb(null, true);
+      cb(new Error('Only Excel files (.xlsx, .xls) are allowed'));
+    }
+  });
+
+  router.post('/upload', requireAuth, requireSuperAdmin, inventoryUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const organizationId = getOrganizationIdFromRequest(req);
+
+      // Parse and sync the uploaded Excel to database
+      const parsed = await parseInventoryFromExcel(req.file.path);
+      const items = parsed.items || [];
+
+      let imported = 0;
+      let skipped = 0;
+      for (const item of items) {
+        if (!item.item_code || item.item_code.trim() === '' || item.item_code === '0') {
+          skipped++;
+          continue;
+        }
+        await pool.query(
+          `INSERT INTO inventory_items (section, item_code, item_description, part_type, min_level, actual_qty, organization_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (item_code) DO UPDATE SET
+             section = EXCLUDED.section,
+             item_description = EXCLUDED.item_description,
+             part_type = EXCLUDED.part_type,
+             min_level = EXCLUDED.min_level,
+             actual_qty = EXCLUDED.actual_qty,
+             updated_at = CURRENT_TIMESTAMP`,
+          [item.section || null, item.item_code, item.item_description || null, item.part_type || null, item.min_level || 0, item.actual_qty || 0, organizationId]
+        );
+        imported++;
+      }
+
+      // Reset the auto-sync checkpoint so future reads pick up this file
+      lastSyncedMtimeMs = null;
+
+      res.json({
+        message: 'Inventory list uploaded and synced successfully',
+        file: req.file.originalname,
+        imported,
+        skipped
+      });
+    } catch (error) {
+      console.error('[INVENTORY] Error uploading inventory list:', error);
+      res.status(500).json({ error: 'Failed to upload inventory list' });
     }
   });
 

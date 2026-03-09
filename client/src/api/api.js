@@ -955,6 +955,38 @@ export const uploadOrganizationLogo = async (id, file) => {
   return response.json();
 };
 
+/** Upload plant map Excel file (system owner only). Parses and saves map structure. */
+export const uploadPlantMap = async (file) => {
+  const API_BASE_URL = getApiBaseUrl();
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await authFetch(`${API_BASE_URL}/plant/upload-map`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to upload plant map');
+  }
+  return data;
+};
+
+/** Upload inventory Excel file (system owner only). Imports items to database. */
+export const uploadInventoryList = async (file) => {
+  const API_BASE_URL = getApiBaseUrl();
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await authFetch(`${API_BASE_URL}/inventory/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to upload inventory list');
+  }
+  return data;
+};
+
 // License API functions removed - no longer needed
 // export const getLicenseStatus = async () => { ... }
 // export const getLicenseInfo = async () => { ... }
