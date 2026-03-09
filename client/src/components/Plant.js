@@ -520,24 +520,25 @@ function Plant() {
     return Math.min(100, Math.max(0, progressValue));
   }, [trackers, viewMode]);
 
-  // Load cycle information
+  // Load cycle information (skip if system owner without company)
   useEffect(() => {
     const loadCycleInfo = async () => {
       if (!viewMode) return;
+      if (isSystemOwnerWithoutCompany(user)) return;
+      if (trackers.length === 0) return;
       setCycleLoading(true);
       try {
         const cycleData = await getCycleInfo(viewMode);
         setCurrentCycle(cycleData);
       } catch (error) {
         console.error('[PLANT] Error loading cycle info:', error);
-        // Don't show error to user, just log it
       } finally {
         setCycleLoading(false);
       }
     };
 
     loadCycleInfo();
-  }, [viewMode, trackers]); // Reload when viewMode or trackers change
+  }, [viewMode, trackers, user]); // Reload when viewMode, trackers, or user change
 
   // Handle cycle reset
   const handleResetCycle = useCallback(async () => {
@@ -714,8 +715,8 @@ function Plant() {
     e.target.value = '';
 
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['xlsx', 'xls', 'csv'].includes(ext)) {
-      setAlertError({ message: 'Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file.' });
+    if (!['xlsx', 'xls', 'csv', 'json'].includes(ext)) {
+      setAlertError({ message: 'Invalid file type. Please upload an Excel (.xlsx, .xls), CSV, or JSON file.' });
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -936,7 +937,7 @@ function Plant() {
                   <input
                     ref={plantFileInputRef}
                     type="file"
-                    accept=".xlsx,.xls,.csv"
+                    accept=".xlsx,.xls,.csv,.json"
                     style={{ display: 'none' }}
                     onChange={handlePlantMapUpload}
                   />

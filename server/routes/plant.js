@@ -1717,10 +1717,10 @@ module.exports = (pool) => {
     }),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-      const allowed = /xlsx|xls|csv/;
+      const allowed = /xlsx|xls|csv|json/;
       const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
       if (allowed.test(ext)) return cb(null, true);
-      cb(new Error('Only Excel (.xlsx, .xls) or CSV files are allowed'));
+      cb(new Error('Only Excel (.xlsx, .xls), CSV, or JSON files are allowed'));
     }
   });
 
@@ -1735,19 +1735,37 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Please select a company first' });
       }
 
-      // Try to parse the uploaded Excel into map structure
+      const ext = path.extname(req.file.originalname).toLowerCase();
       let structure = [];
-      try {
-        const parsed = parsePlantMap(req.file.path);
-        if (parsed && parsed.length > 0) {
-          structure = parsed;
+
+      if (ext === '.json') {
+        // JSON upload — read and use directly as map structure
+        try {
+          const jsonData = JSON.parse(fs.readFileSync(req.file.path, 'utf8'));
+          // Support both raw array and { structure: [...] } format
+          if (Array.isArray(jsonData)) {
+            structure = jsonData;
+          } else if (jsonData.structure && Array.isArray(jsonData.structure)) {
+            structure = jsonData.structure;
+          } else {
+            return res.status(400).json({ error: 'JSON must be an array of trackers or { structure: [...] }' });
+          }
+        } catch (parseErr) {
+          return res.status(400).json({ error: 'Invalid JSON file: ' + parseErr.message });
         }
-      } catch (parseError) {
-        console.log('[PLANT] Could not auto-parse map structure from upload:', parseError.message);
-        // File is still saved — user can use the Builder to create structure manually
+      } else {
+        // Excel/CSV upload — try to parse via plantMapParser
+        try {
+          const parsed = parsePlantMap(req.file.path);
+          if (parsed && parsed.length > 0) {
+            structure = parsed;
+          }
+        } catch (parseError) {
+          console.log('[PLANT] Could not auto-parse map structure from upload:', parseError.message);
+        }
       }
 
-      // If we got structure, save it as map-structure.json
+      // Save structure as map-structure.json
       if (structure.length > 0) {
         const organizationId = getOrganizationIdFromRequest(req);
         await saveMapStructureToFile(req, structure, 1, organizationId);
@@ -1757,8 +1775,7 @@ module.exports = (pool) => {
         message: 'Plant map uploaded successfully',
         file: req.file.originalname,
         size: req.file.size,
-        trackersFound: structure.length,
-        path: req.file.path
+        trackersFound: structure.length
       });
     } catch (error) {
       console.error('[PLANT] Error uploading plant map:', error);
