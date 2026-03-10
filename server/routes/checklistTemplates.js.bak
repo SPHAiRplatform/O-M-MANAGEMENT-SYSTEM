@@ -20,24 +20,15 @@ module.exports = (pool) => {
   const storage = multer.diskStorage({
     destination: async (req, file, cb) => {
       try {
-        let organizationSlug = await getOrganizationSlugFromRequest(req, pool);
-
-        // System owners in platform mode: use system owner uploads folder
+        const organizationSlug = await getOrganizationSlugFromRequest(req, pool);
+        
         if (!organizationSlug) {
-          const isSystemOwner = req.session?.role === 'system_owner' ||
-                                req.session?.role === 'super_admin' ||
-                                (req.session?.roles || []).includes('system_owner') ||
-                                (req.session?.roles || []).includes('super_admin');
-          if (isSystemOwner) {
-            organizationSlug = 'system-owner';
-          } else {
-            return cb(new Error('Organization context is required for file uploads'));
-          }
+          return cb(new Error('Organization context is required for file uploads'));
         }
 
         // Ensure company directories exist
         await ensureCompanyDirs(organizationSlug);
-
+        
         // Get company-scoped templates directory
         const uploadDir = getStoragePath(organizationSlug, 'templates');
         cb(null, uploadDir);

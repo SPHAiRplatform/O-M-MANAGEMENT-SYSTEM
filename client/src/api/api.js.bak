@@ -1004,8 +1004,11 @@ export const uploadInventoryList = async (file) => {
 // export const generateLicenseKey = async (companyName) => { ... }
 
 export const submitFeedback = async (data) => {
+  const API_BASE_URL = getApiBaseUrl();
   try {
-    const response = await api.post('/feedback', data);
+    const response = await axios.post(`${API_BASE_URL}/feedback`, data, {
+      withCredentials: true,
+    });
     return response.data;
   } catch (error) {
     console.error('Error submitting feedback:', error);
@@ -1014,7 +1017,8 @@ export const submitFeedback = async (data) => {
 };
 
 export const getContactEmail = async () => {
-  const response = await api.get('/feedback/contact-email');
+  const base = getApiBaseUrl();
+  const response = await axios.get(`${base}/feedback/contact-email`, { withCredentials: true });
   return response.data;
 };
 

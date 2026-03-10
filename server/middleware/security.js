@@ -131,6 +131,11 @@ function validateUUIDParams(req, res, next) {
     return next();
   }
   
+  // Skip if this is a checklist-templates upload or asset-type route
+  if (req.params.id === 'upload' || req.params.id === 'asset-type') {
+    return next();
+  }
+
   // Check params that should be UUIDs (id parameter)
   // Only validate 'id' parameter, not other params like 'action', 'filename', etc.
   if (req.params.id) {
