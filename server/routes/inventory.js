@@ -120,7 +120,6 @@ module.exports = (pool) => {
       }
       
       // Get organization ID from request context (for explicit filtering)
-      const { getOrganizationIdFromRequest } = require('../utils/organizationFilter');
       const organizationId = getOrganizationIdFromRequest(req);
       
       if (!organizationId) {
