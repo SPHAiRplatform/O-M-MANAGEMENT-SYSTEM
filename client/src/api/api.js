@@ -443,10 +443,12 @@ export const getPlantMapData = async () => {
 // Get plant map structure from server
 export const getPlantMapStructure = async () => {
   try {
+    const token = sessionStorage.getItem('authToken');
     const response = await axios.get(`${getApiBaseUrl()}/plant/structure`, {
       withCredentials: true,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
       }
     });
     return response.data;
@@ -459,6 +461,7 @@ export const getPlantMapStructure = async () => {
 // Save plant map structure to server
 export const savePlantMapStructure = async (structure, labels = null) => {
   try {
+    const token = sessionStorage.getItem('authToken');
     const body = { structure };
     if (labels) body.labels = labels;
     const response = await axios.post(`${getApiBaseUrl()}/plant/structure`,
@@ -466,7 +469,8 @@ export const savePlantMapStructure = async (structure, labels = null) => {
       {
         withCredentials: true,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         }
       }
     );
@@ -522,9 +526,10 @@ export const reviewTrackerStatusRequest = async (requestId, action, rejectionRea
 // Cycle Tracking API functions
 export const getCycleInfo = async (taskType) => {
   try {
+    const token = sessionStorage.getItem('authToken');
     const response = await axios.get(
       `${getApiBaseUrl()}/plant/cycles/${taskType}`,
-      { withCredentials: true }
+      { withCredentials: true, headers: { ...(token && { 'Authorization': `Bearer ${token}` }) } }
     );
     return response.data;
   } catch (error) {
@@ -535,10 +540,11 @@ export const getCycleInfo = async (taskType) => {
 
 export const resetCycle = async (taskType) => {
   try {
+    const token = sessionStorage.getItem('authToken');
     const response = await axios.post(
       `${getApiBaseUrl()}/plant/cycles/${taskType}/reset`,
       {},
-      { withCredentials: true }
+      { withCredentials: true, headers: { ...(token && { 'Authorization': `Bearer ${token}` }) } }
     );
     return response.data;
   } catch (error) {
@@ -549,10 +555,11 @@ export const resetCycle = async (taskType) => {
 
 export const clearCycleToZero = async (taskType) => {
   try {
+    const token = sessionStorage.getItem('authToken');
     const response = await axios.post(
       `${getApiBaseUrl()}/plant/cycles/${taskType}/clear`,
       {},
-      { withCredentials: true }
+      { withCredentials: true, headers: { ...(token && { 'Authorization': `Bearer ${token}` }) } }
     );
     return response.data;
   } catch (error) {

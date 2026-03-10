@@ -11,6 +11,17 @@ const { isFeatureEnabled } = require('../utils/organizationConfig');
 function requireFeature(pool, featureCode) {
   return async (req, res, next) => {
     try {
+      // System owners bypass feature checks - they have full access
+      const role = req.session?.role;
+      const roles = req.session?.roles || [];
+      const isSystemOwner = role === 'system_owner' ||
+                            role === 'super_admin' ||
+                            roles.includes('system_owner') ||
+                            roles.includes('super_admin');
+      if (isSystemOwner) {
+        return next();
+      }
+
       const orgId = getOrganizationIdFromRequest(req);
       if (!orgId) {
         return res.status(403).json({

@@ -50,6 +50,11 @@ function requirePasswordChange(pool) {
  * Supports both JWT tokens (Bearer token) and session-based authentication
  */
 async function requireAuth(req, res, next) {
+  // If session already populated by JWT fallback middleware, skip JWT check
+  if (req.session && req.session.userId && req.session._fromJwt) {
+    return next();
+  }
+
   // Try JWT token first (Bearer token in Authorization header)
   const token = extractToken(req);
   
@@ -62,14 +67,15 @@ async function requireAuth(req, res, next) {
       // A valid JWT is sufficient for auth — Redis is optional for enrichment/revocation
       if (isRedisAvailable() && !isDevelopment()) {
         // Single-Device-Per-Session: only reject if another device explicitly logged in
-        const { getUserSession } = require('../utils/redis');
-        const existingSession = await getUserSession(decoded.userId);
-        if (existingSession && existingSession !== token) {
-          return res.status(401).json({
-            error: 'Session expired',
-            message: 'You have logged in from another device. Please log in again.'
-          });
-        }
+        // TEMPORARILY DISABLED - causes issues with multiple tabs/restarts
+       // const { getUserSession } = require('../utils/redis');
+       // const existingSession = await getUserSession(decoded.userId);
+        //if (existingSession && existingSession !== token) {
+          //return res.status(401).json({
+            //error: 'Session expired',
+            //message: 'You have logged in from another device. Please log in again.'
+          //});
+        //}
       }
 
       // JWT is valid — populate session from decoded token
