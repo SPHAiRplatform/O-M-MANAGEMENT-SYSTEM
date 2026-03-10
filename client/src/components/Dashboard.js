@@ -466,8 +466,9 @@ function Dashboard() {
       };
       setInventoryStats(invStats);
 
-      // Load today's calendar activities and tasks
-      const today = new Date().toISOString().split('T')[0];
+      // Load today's calendar activities and tasks (use local date, not UTC)
+      const todayLocal = new Date();
+      const today = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
       try {
         const [calendarRes] = await Promise.all([
           getCalendarEventsByDate(today).catch(() => ({ data: [] }))
@@ -478,7 +479,8 @@ function Dashboard() {
         // Filter tasks scheduled for today
         const todayTasks = tasks.filter(task => {
           if (!task.scheduled_date) return false;
-          const taskDate = new Date(task.scheduled_date).toISOString().split('T')[0];
+          const d = new Date(task.scheduled_date);
+          const taskDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           return taskDate === today;
         });
         
@@ -1015,7 +1017,7 @@ function Dashboard() {
                         <div className="activity-title">
                           {activity.title || activity.event_name || 'Untitled Event'}
                           {activity.type === 'task' && activity.task_code && (
-                            <span style={{ fontSize: '11px', color: '#666', marginLeft: '6px', fontFamily: 'monospace' }}>
+                            <span style={{ fontSize: '13px', color: '#666', marginLeft: '6px', fontFamily: 'monospace' }}>
                               ({activity.task_code})
                             </span>
                           )}
@@ -1024,8 +1026,8 @@ function Dashboard() {
                           <div className="activity-description">{activity.description}</div>
                         )}
                         {activity.type === 'task' && activity.status && (
-                          <div className="activity-status" style={{ 
-                            fontSize: '11px', 
+                          <div className="activity-status" style={{
+                            fontSize: '13px',
                             color: activity.status === 'completed' ? '#28a745' : 
                                    activity.status === 'in_progress' ? '#17a2b8' : '#ffc107',
                             fontWeight: '500',
