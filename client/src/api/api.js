@@ -576,7 +576,8 @@ export const getCycleHistory = async (taskType, year = null, month = null) => {
     if (month) params.push(`month=${month}`);
     if (params.length > 0) url += `?${params.join('&')}`;
     
-    const response = await axios.get(url, { withCredentials: true });
+    const token = sessionStorage.getItem('authToken');
+    const response = await axios.get(url, { withCredentials: true, headers: { ...(token && { 'Authorization': `Bearer ${token}` }) } });
     return response.data;
   } catch (error) {
     console.error('Error fetching cycle history:', error);
@@ -589,7 +590,8 @@ export const getCycleStats = async (taskType, year = null) => {
     let url = `${getApiBaseUrl()}/plant/cycles/${taskType}/stats`;
     if (year) url += `?year=${year}`;
     
-    const response = await axios.get(url, { withCredentials: true });
+    const token = sessionStorage.getItem('authToken');
+    const response = await axios.get(url, { withCredentials: true, headers: { ...(token && { 'Authorization': `Bearer ${token}` }) } });
     return response.data;
   } catch (error) {
     console.error('Error fetching cycle stats:', error);
