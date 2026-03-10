@@ -315,6 +315,10 @@ function Calendar() {
 
   const handleDeleteEvent = () => {
     if (!editingEvent) return;
+    const eventToDelete = editingEvent;
+
+    // Close the edit modal first so the confirm dialog is visible
+    setShowEventModal(false);
 
     setConfirmDialog({
       title: 'Delete Event',
@@ -323,9 +327,8 @@ function Calendar() {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          await deleteCalendarEvent(editingEvent.id);
+          await deleteCalendarEvent(eventToDelete.id);
           await loadEvents();
-          setShowEventModal(false);
           setEditingEvent(null);
           setSelectedDate(null);
         } catch (err) {
