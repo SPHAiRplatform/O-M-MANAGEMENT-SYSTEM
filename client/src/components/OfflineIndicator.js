@@ -22,18 +22,18 @@ function OfflineIndicator() {
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
 
-    // Check pending items
+    // Check pending items — only update state when count actually changes
     const checkPending = async () => {
       try {
         const pending = await offlineStorage.getSyncQueue('pending');
-        setPendingCount(pending.length);
+        setPendingCount(prev => prev !== pending.length ? pending.length : prev);
       } catch (error) {
-        console.error('Error checking pending items:', error);
+        // Silently ignore — don't cause re-renders for check errors
       }
     };
 
     checkPending();
-    const interval = setInterval(checkPending, 5000);
+    const interval = setInterval(checkPending, 30000); // 30s instead of 5s
 
     // Listen to sync status
     const unsubscribe = syncManager.onSyncStatusChange((status, data) => {
