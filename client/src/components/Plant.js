@@ -156,7 +156,11 @@ function Plant() {
   // Custom labels per organization (stored in map-structure.json)
   const [plantLabels, setPlantLabels] = useState({
     trackerName: 'Trackers',
-    cycleName: 'Cycle'
+    cycleName: 'Cycle',
+    grassCuttingEnabled: true,
+    panelWashEnabled: true,
+    grassCuttingName: 'Grass Cutting',
+    panelWashName: 'Panel Wash'
   });
   const siteMapName = 'Site Map'; // Always "Site Map" for all organizations
   const location = useLocation();
@@ -221,6 +225,13 @@ function Plant() {
             // Load custom labels if present
             if (result.labels) {
               setPlantLabels(prev => ({ ...prev, ...result.labels }));
+              // Auto-switch viewMode if current type is disabled
+              const lbl = { ...result.labels };
+              if (lbl.grassCuttingEnabled === false && viewMode === 'grass_cutting') {
+                setViewMode('panel_wash');
+              } else if (lbl.panelWashEnabled === false && viewMode === 'panel_wash') {
+                setViewMode('grass_cutting');
+              }
             }
           } else {
             // Server returned empty array - company has no map data
@@ -549,7 +560,7 @@ function Plant() {
 
     setConfirmDialog({
       title: `Reset ${plantLabels.cycleName}`,
-      message: `Are you sure you want to reset the ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} ${plantLabels.cycleName.toLowerCase()}?\n\nThis will:\n- Complete the current ${plantLabels.cycleName.toLowerCase()}\n- Start a new ${plantLabels.cycleName.toLowerCase()}\n- Reset all ${plantLabels.trackerName.toLowerCase()} colors to white\n\nThis action cannot be undone.`,
+      message: `Are you sure you want to reset the ${viewMode === 'grass_cutting' ? (plantLabels.grassCuttingName || 'Grass Cutting') : (plantLabels.panelWashName || 'Panel Wash')} ${plantLabels.cycleName.toLowerCase()}?\n\nThis will:\n- Complete the current ${plantLabels.cycleName.toLowerCase()}\n- Start a new ${plantLabels.cycleName.toLowerCase()}\n- Reset all ${plantLabels.trackerName.toLowerCase()} colors to white\n\nThis action cannot be undone.`,
       confirmLabel: 'Reset',
       variant: 'danger',
       onConfirm: async () => {
@@ -606,7 +617,7 @@ function Plant() {
   const handleClearCycleToZero = useCallback(async () => {
     setConfirmDialog({
       title: `Clear ${plantLabels.cycleName} to Zero`,
-      message: `This will permanently delete ALL ${plantLabels.cycleName.toLowerCase()} history for ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} and reset the count to 0.\n\nAll ${plantLabels.trackerName.toLowerCase()} colors will be reset to white.\n\nThis action cannot be undone.`,
+      message: `This will permanently delete ALL ${plantLabels.cycleName.toLowerCase()} history for ${viewMode === 'grass_cutting' ? (plantLabels.grassCuttingName || 'Grass Cutting') : (plantLabels.panelWashName || 'Panel Wash')} and reset the count to 0.\n\nAll ${plantLabels.trackerName.toLowerCase()} colors will be reset to white.\n\nThis action cannot be undone.`,
       confirmLabel: 'Clear to Zero',
       variant: 'danger',
       onConfirm: async () => {
@@ -793,19 +804,23 @@ function Plant() {
             <div className="plant-view-progress" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
               <div className="plant-view-select" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <label style={{ fontWeight: 'bold', fontSize: '12px' }}>View:</label>
-                <select 
-                  value={viewMode} 
+                <select
+                  value={viewMode}
                   onChange={(e) => setViewMode(e.target.value)}
-                  style={{ 
-                    padding: '4px 6px', 
-                    fontSize: '12px', 
+                  style={{
+                    padding: '4px 6px',
+                    fontSize: '12px',
                     borderRadius: '4px',
                     border: '1px solid #ccc',
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="grass_cutting">🌿 Grass Cutting</option>
-                  <option value="panel_wash">💧 Panel Wash</option>
+                  {plantLabels.grassCuttingEnabled !== false && (
+                    <option value="grass_cutting">{plantLabels.grassCuttingName || 'Grass Cutting'}</option>
+                  )}
+                  {plantLabels.panelWashEnabled !== false && (
+                    <option value="panel_wash">{plantLabels.panelWashName || 'Panel Wash'}</option>
+                  )}
                 </select>
               </div>
               {/* Progress Bar */}
@@ -857,7 +872,7 @@ function Plant() {
                     className="plant-clean-btn"
                     onClick={handleResetCycle}
                     disabled={resettingCycle}
-                    title={`Reset ${viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'} ${plantLabels.cycleName.toLowerCase()} and clear all ${plantLabels.trackerName.toLowerCase()}`}
+                    title={`Reset ${viewMode === 'grass_cutting' ? (plantLabels.grassCuttingName || 'Grass Cutting') : (plantLabels.panelWashName || 'Panel Wash')} ${plantLabels.cycleName.toLowerCase()} and clear all ${plantLabels.trackerName.toLowerCase()}`}
                     style={{
                       padding: '4px 8px',
                       fontSize: '11px',
@@ -1173,7 +1188,7 @@ function Plant() {
                 Update Status
               </h2>
               <p style={{ margin: '0', color: '#666', fontSize: '14px' }}>
-                You've selected <strong>{selectedTrackers.size}</strong> tracker(s) for <strong>{viewMode === 'grass_cutting' ? 'Grass Cutting' : 'Panel Wash'}</strong>
+                You've selected <strong>{selectedTrackers.size}</strong> tracker(s) for <strong>{viewMode === 'grass_cutting' ? (plantLabels.grassCuttingName || 'Grass Cutting') : (plantLabels.panelWashName || 'Panel Wash')}</strong>
               </p>
             </div>
 
@@ -1229,8 +1244,7 @@ function Plant() {
               border: '1px solid #ffc107'
             }}>
               <p style={{ margin: 0, fontSize: '13px', color: '#856404' }}>
-                <i className="bi bi-exclamation-triangle-fill"></i> <strong>Note:</strong> Your request will be sent to admin/superadmin for approval.
-                The tracker colors will only change after approval.
+                <i className="bi bi-exclamation-triangle-fill"></i> Requires admin approval before changes take effect.
               </p>
             </div>
 

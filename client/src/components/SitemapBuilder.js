@@ -65,7 +65,11 @@ function SitemapBuilder({ initialTrackers, initialLabels, onSave, onExit }) {
   // Custom terminology labels
   const [labels, setLabels] = useState({
     trackerName: initialLabels?.trackerName || 'Trackers',
-    cycleName: initialLabels?.cycleName || 'Cycle'
+    cycleName: initialLabels?.cycleName || 'Cycle',
+    grassCuttingEnabled: initialLabels?.grassCuttingEnabled !== false,
+    panelWashEnabled: initialLabels?.panelWashEnabled !== false,
+    grassCuttingName: initialLabels?.grassCuttingName || 'Grass Cutting',
+    panelWashName: initialLabels?.panelWashName || 'Panel Wash'
   });
 
   // Undo/Redo history
@@ -891,6 +895,60 @@ function SitemapBuilder({ initialTrackers, initialLabels, onSave, onExit }) {
                   setHasUnsavedChanges(true);
                 }}
                 placeholder="e.g. Cycle, Round, Phase"
+              />
+            </div>
+          </div>
+
+          {/* Tracking Types Configuration */}
+          <div className="builder-labels-section">
+            <h4>Tracking Types</h4>
+            <p className="labels-hint">
+              Enable or disable tracking types for this company. Rename them to match your operations.
+            </p>
+            {/* Grass Cutting / First tracking type */}
+            <div className="property-field" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <input
+                type="checkbox"
+                checked={labels.grassCuttingEnabled}
+                onChange={e => {
+                  setLabels(prev => ({ ...prev, grassCuttingEnabled: e.target.checked }));
+                  setHasUnsavedChanges(true);
+                }}
+                id="grassCuttingToggle"
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <input
+                value={labels.grassCuttingName}
+                onChange={e => {
+                  setLabels(prev => ({ ...prev, grassCuttingName: e.target.value }));
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="e.g. Grass Cutting, Vegetation"
+                style={{ flex: 1, opacity: labels.grassCuttingEnabled ? 1 : 0.5 }}
+                disabled={!labels.grassCuttingEnabled}
+              />
+            </div>
+            {/* Panel Wash / Second tracking type */}
+            <div className="property-field" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={labels.panelWashEnabled}
+                onChange={e => {
+                  setLabels(prev => ({ ...prev, panelWashEnabled: e.target.checked }));
+                  setHasUnsavedChanges(true);
+                }}
+                id="panelWashToggle"
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <input
+                value={labels.panelWashName}
+                onChange={e => {
+                  setLabels(prev => ({ ...prev, panelWashName: e.target.value }));
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="e.g. Panel Wash, Module Cleaning"
+                style={{ flex: 1, opacity: labels.panelWashEnabled ? 1 : 0.5 }}
+                disabled={!labels.panelWashEnabled}
               />
             </div>
           </div>

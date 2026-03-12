@@ -201,6 +201,12 @@ function Dashboard() {
   });
   const [todayActivities, setTodayActivities] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [plantLabels, setPlantLabels] = useState({
+    grassCuttingEnabled: true,
+    panelWashEnabled: true,
+    grassCuttingName: 'Grass Cutting',
+    panelWashName: 'Panel Wash'
+  });
 
   // Live clock - update every second
   useEffect(() => {
@@ -369,6 +375,17 @@ function Dashboard() {
         ? plantRes.structure 
         : [];
       const inventoryItems = inventoryRes.data || [];
+
+      // Load plant labels (custom tracking type names and enabled/disabled flags)
+      if (plantRes && plantRes.labels) {
+        setPlantLabels(prev => ({ ...prev, ...plantRes.labels }));
+        // Auto-switch trackerViewMode if current type is disabled
+        if (plantRes.labels.grassCuttingEnabled === false && trackerViewMode === 'grass_cutting') {
+          setTrackerViewMode('panel_wash');
+        } else if (plantRes.labels.panelWashEnabled === false && trackerViewMode === 'panel_wash') {
+          setTrackerViewMode('grass_cutting');
+        }
+      }
 
       // Calculate stats
       const statsData = {
@@ -946,20 +963,23 @@ function Dashboard() {
           {/* Grass Cutting / Panel Wash Progress */}
           <div className="dashboard-card">
             <div className="card-header">
-              <h3>Grass Cutting Progress</h3>
-              <select 
-                className="period-dropdown"
-                value={trackerViewMode}
-                onChange={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setTrackerViewMode(e.target.value);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="grass_cutting">Grass Cutting</option>
-                <option value="panel_wash">Panel Wash</option>
-              </select>
+              <h3>{trackerViewMode === 'grass_cutting' ? `${plantLabels.grassCuttingName} Progress` : `${plantLabels.panelWashName} Progress`}</h3>
+              {/* Only show dropdown if both types are enabled */}
+              {plantLabels.grassCuttingEnabled !== false && plantLabels.panelWashEnabled !== false ? (
+                <select
+                  className="period-dropdown"
+                  value={trackerViewMode}
+                  onChange={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTrackerViewMode(e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <option value="grass_cutting">{plantLabels.grassCuttingName}</option>
+                  <option value="panel_wash">{plantLabels.panelWashName}</option>
+                </select>
+              ) : null}
             </div>
             <div className="tracker-chart-container">
               <div className="tracker-chart-wrapper">
