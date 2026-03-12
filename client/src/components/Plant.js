@@ -800,8 +800,8 @@ function Plant() {
             gap: '20px', 
             flexWrap: 'wrap'
           }}>
-            {/* View and Progress Bar */}
-            <div className="plant-view-progress" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+            {/* View and Progress Bar - hidden during selection mode */}
+            {!selectionMode && <div className="plant-view-progress" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
               <div className="plant-view-select" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <label style={{ fontWeight: 'bold', fontSize: '12px' }}>View:</label>
                 <select
@@ -917,7 +917,7 @@ function Plant() {
                   </button>
                 )}
               </div>
-            </div>
+            </div>}
 
             {/* Action Buttons - compact horizontal group */}
             <div className="plant-action-buttons" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
@@ -933,21 +933,23 @@ function Plant() {
                 {selectionMode ? '✓ Select' : 'Select'}
               </button>
 
-              <button
-                onClick={handleDownloadReport}
-                className="btn btn-primary"
-                disabled={downloading || trackers.length === 0}
-                style={{ 
-                  padding: '6px 10px', 
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}
-                title="Download plant map report with image and statistics"
-              >
-                {downloading ? '...' : '↓ PDF'}
-              </button>
+              {!selectionMode && (
+                <button
+                  onClick={handleDownloadReport}
+                  className="btn btn-primary"
+                  disabled={downloading || trackers.length === 0}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}
+                  title="Download plant map report with image and statistics"
+                >
+                  {downloading ? '...' : '↓ PDF'}
+                </button>
+              )}
 
-              {hasAnyRole('system_owner') && (
+              {!selectionMode && hasAnyRole('system_owner') && (
                 <>
                   <input
                     ref={plantFileInputRef}
