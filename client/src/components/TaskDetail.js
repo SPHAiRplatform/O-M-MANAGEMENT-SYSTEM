@@ -8,7 +8,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 function TaskDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin, isSupervisor } = useAuth();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -229,10 +229,9 @@ function TaskDetail() {
             <strong>Assigned To:</strong>{' '}
             {task.assigned_users && task.assigned_users.length > 0 ? (
               <div style={{ marginTop: '5px' }}>
-                {task.assigned_users.map((user, idx) => (
-                  <div key={user.id || idx} style={{ marginBottom: '4px' }}>
-                    {user.full_name || user.username}
-                    {user.email && <span style={{ color: '#666', marginLeft: '8px' }}>({user.email})</span>}
+                {task.assigned_users.map((u, idx) => (
+                  <div key={u.id || idx} style={{ marginBottom: '4px' }}>
+                    {u.full_name || u.username}
                   </div>
                 ))}
               </div>
@@ -296,25 +295,13 @@ function TaskDetail() {
           {(task.task_type === 'PCM' || task.task_type === 'UCM') && task.parent_task_id && (
             <div>
               <strong>PM Task Performed By:</strong>{' '}
-              {task.pm_performed_by_name ? (
-                <span>
-                  {task.pm_performed_by_name}
-                  {task.pm_performed_by_email && (
-                    <span style={{ color: '#666', marginLeft: '8px' }}>
-                      ({task.pm_performed_by_email})
-                    </span>
-                  )}
-                </span>
-              ) : (
-                'Not available'
-              )}
+              {task.pm_performed_by_name || 'Not available'}
             </div>
           )}
         </div>
 
         <div style={{ marginTop: '30px', padding: '20px', background: '#f9f9f9', borderRadius: '4px' }}>
           <h3>Task Identification</h3>
-          <p><strong>This is a {task.task_type} task</strong> for the <strong>{task.asset_type || 'asset'}</strong> asset type.</p>
           <p>Task Name: <strong>{task.template_name}</strong> ({task.template_code})</p>
           {(task.task_type === 'PCM' || task.task_type === 'UCM') && task.parent_task_id && (
             <p style={{ marginTop: '10px', color: '#666' }}>
@@ -322,6 +309,110 @@ function TaskDetail() {
             </p>
           )}
         </div>
+
+        {/* Task Progress — visible to Admin, Supervisor, Super Admin, System Owner */}
+        {(isAdmin() || isSupervisor()) && (
+          <div style={{ marginTop: '20px', padding: '20px', background: '#fff', borderRadius: '8px', border: '1px solid #e0e0e0', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#333', borderBottom: '2px solid #1A73E8', paddingBottom: '8px' }}>Task Progress</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+              {/* Task Started */}
+              <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: `4px solid ${task.started_at ? '#28a745' : '#dc3545'}` }}>
+                <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Task Started</div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: task.started_at ? '#28a745' : '#dc3545' }}>
+                  {task.started_at ? 'Yes' : 'No'}
+                </div>
+                {task.started_at && (
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                    {new Date(task.started_at).toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              {/* Current Status */}
+              <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: `4px solid ${task.status === 'completed' ? '#28a745' : task.status === 'in_progress' ? '#17a2b8' : '#ffc107'}` }}>
+                <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Current Status</div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: task.status === 'completed' ? '#28a745' : task.status === 'in_progress' ? '#17a2b8' : '#ffc107' }}>
+                  {task.status === 'in_progress' ? 'In Progress' : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                </div>
+              </div>
+
+              {/* Task Paused */}
+              <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: `4px solid ${task.is_paused ? '#ffc107' : '#28a745'}` }}>
+                <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Currently Paused</div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: task.is_paused ? '#ffc107' : '#28a745' }}>
+                  {task.is_paused ? 'Yes' : 'No'}
+                </div>
+                {task.is_paused && task.pause_reason && (
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                    Reason: {task.pause_reason}
+                  </div>
+                )}
+              </div>
+
+              {/* Time Elapsed — live timer for in-progress tasks */}
+              <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid #17a2b8' }}>
+                <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                  {task.status === 'completed' ? 'Total Duration' : 'Time Elapsed'}
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: '#17a2b8' }}>
+                  {task.status === 'completed' && task.duration_minutes
+                    ? `${task.duration_minutes} min`
+                    : task.started_at
+                      ? (() => {
+                          const elapsed = Math.floor((new Date() - new Date(task.started_at)) / 60000);
+                          const pauseMin = task.total_pause_duration_minutes || 0;
+                          const active = Math.max(0, elapsed - pauseMin);
+                          const hrs = Math.floor(active / 60);
+                          const mins = active % 60;
+                          return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                        })()
+                      : '—'
+                  }
+                </div>
+                {task.total_pause_duration_minutes > 0 && (
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                    Paused for {task.total_pause_duration_minutes} min total
+                  </div>
+                )}
+              </div>
+
+              {/* Hours Worked vs Budget */}
+              {task.budgeted_hours != null && (
+                <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: `4px solid ${task.is_flagged ? '#dc3545' : '#1A73E8'}` }}>
+                  <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Hours Worked / Budget</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: task.is_flagged ? '#dc3545' : '#1A73E8' }}>
+                    {task.hours_worked != null ? parseFloat(task.hours_worked).toFixed(1) : '0.0'}h / {parseFloat(task.budgeted_hours).toFixed(1)}h
+                  </div>
+                  {task.is_flagged && (
+                    <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px', fontWeight: '500' }}>
+                      Exceeded budgeted hours
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Completed At */}
+              {task.completed_at && (
+                <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid #28a745' }}>
+                  <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Completed At</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#28a745' }}>
+                    {new Date(task.completed_at).toLocaleString()}
+                  </div>
+                </div>
+              )}
+
+              {/* Overall Result */}
+              {task.overall_status && (
+                <div style={{ padding: '12px 16px', background: '#f8f9fa', borderRadius: '6px', borderLeft: `4px solid ${task.overall_status === 'pass' ? '#28a745' : task.overall_status === 'fail' ? '#dc3545' : '#ffc107'}` }}>
+                  <div style={{ fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Overall Result</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: task.overall_status === 'pass' ? '#28a745' : task.overall_status === 'fail' ? '#dc3545' : '#ffc107' }}>
+                    {task.overall_status === 'pass' ? 'Pass' : task.overall_status === 'fail' ? 'Fail' : task.overall_status.charAt(0).toUpperCase() + task.overall_status.slice(1)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Early Completion Request Section - only show for future-dated tasks */}
         {task.status === 'pending' && task.scheduled_date &&
