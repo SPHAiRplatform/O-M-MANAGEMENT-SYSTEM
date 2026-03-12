@@ -1059,6 +1059,9 @@ function Plant() {
             await savePlantMapStructure(newTrackers, newLabels);
             setTrackers(newTrackers);
             if (newLabels) setPlantLabels(prev => ({ ...prev, ...newLabels }));
+            setBuilderMode(false);
+            hasLoadedRef.current = false;
+            loadMapStructure(true);
           }}
           onExit={() => {
             setBuilderMode(false);

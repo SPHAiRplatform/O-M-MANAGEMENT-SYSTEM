@@ -1,8 +1,25 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { body, validationResult } = require('express-validator');
 const { requireAuth } = require('../middleware/auth');
 const nodemailer = require('nodemailer');
 const { getDb } = require('../middleware/tenantContext');
+
+// Multer config for feedback attachments (temp directory, 5MB limit)
+const feedbackUpload = multer({
+  dest: path.join(os.tmpdir(), 'feedback-uploads'),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp|pdf/;
+    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mime = allowed.test(file.mimetype);
+    if (mime && ext) return cb(null, true);
+    cb(new Error('Only images and PDF files are allowed.'));
+  }
+});
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -11,7 +28,7 @@ module.exports = (pool) => {
   const feedbackValidation = [
     body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
     body('subject').isIn(['question', 'bug', 'feature', 'improvement', 'other']).withMessage('Valid subject is required'),
-    body('message').trim().isLength({ min: 10, max: 2000 }).withMessage('Message must be between 10 and 2000 characters'),
+    body('message').trim().isLength({ min: 20, max: 2000 }).withMessage('Message must be between 20 and 2000 characters'),
     body('page_url').optional().isString().trim(),
   ];
 
@@ -28,8 +45,8 @@ module.exports = (pool) => {
     }
   });
 
-  // Submit feedback
-  router.post('/', requireAuth, feedbackValidation, async (req, res) => {
+  // Submit feedback (with optional file attachment)
+  router.post('/', requireAuth, feedbackUpload.single('attachment'), feedbackValidation, async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -101,7 +118,7 @@ module.exports = (pool) => {
             other: 'Other'
           };
 
-          await transporter.sendMail({
+          const mailOptions = {
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             replyTo: userEmail || undefined,
             to: toEmail,
@@ -115,8 +132,18 @@ module.exports = (pool) => {
               <hr>
               <p><strong>Message:</strong></p>
               <p>${message.replace(/\n/g, '<br>')}</p>
+              ${req.file ? '<p><em>📎 See attached file.</em></p>' : ''}
             `,
-          });
+          };
+
+          if (req.file) {
+            mailOptions.attachments = [{
+              filename: req.file.originalname,
+              path: req.file.path
+            }];
+          }
+
+          await transporter.sendMail(mailOptions);
         }
       } catch (emailError) {
         // Log but don't fail the request if email fails
@@ -131,6 +158,11 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('Error submitting feedback:', error);
       res.status(500).json({ error: 'Failed to submit feedback' });
+    } finally {
+      // Clean up temp file
+      if (req.file && req.file.path) {
+        try { fs.unlink(req.file.path, () => {}); } catch (_) {}
+      }
     }
   });
 

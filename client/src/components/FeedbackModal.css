@@ -136,6 +136,89 @@
   color: #666;
 }
 
+/* Message header row - label + upload button */
+.feedback-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.feedback-message-header label {
+  margin-bottom: 0;
+}
+
+.feedback-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1976D2;
+  background: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.feedback-upload-btn:hover:not(:disabled) {
+  background: #bbdefb;
+  border-color: #90caf9;
+}
+
+.feedback-upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feedback-char-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  text-align: right;
+}
+
+.feedback-attachment-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f0f7ff;
+  border: 1px solid #d0e3f7;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.feedback-attachment-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #1976D2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 30px);
+}
+
+.feedback-attachment-remove {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.feedback-attachment-remove:hover {
+  color: #c62828;
+}
+
 .feedback-modal-actions {
   display: flex;
   justify-content: flex-end;

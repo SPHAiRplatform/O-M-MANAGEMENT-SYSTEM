@@ -1005,7 +1005,10 @@ export const uploadInventoryList = async (file) => {
 
 export const submitFeedback = async (data) => {
   try {
-    const response = await api.post('/feedback', data);
+    const isFormData = data instanceof FormData;
+    const response = await api.post('/feedback', data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    } : undefined);
     return response.data;
   } catch (error) {
     console.error('Error submitting feedback:', error);

@@ -11,15 +11,19 @@ function FeedbackModal({ isOpen, onClose }) {
     subject: 'question',
     message: ''
   });
+  const [attachment, setAttachment] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setError('');
       setSuccess(false);
       setFormData({ subject: 'question', message: '' });
+      setAttachment(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       getContactEmail()
         .then((data) => setContactEmail(data.contact_email || ''))
         .catch(() => setContactEmail(''));
@@ -29,22 +33,33 @@ function FeedbackModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (formData.message.trim().length < 20) {
+      setError('Message must be at least 20 characters long.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      await submitFeedback({
-        email: user?.email || user?.username || '',
-        subject: formData.subject,
-        message: formData.message,
-        user_id: user?.id,
-        page_url: window.location.pathname
-      });
+      const payload = new FormData();
+      payload.append('email', user?.email || user?.username || '');
+      payload.append('subject', formData.subject);
+      payload.append('message', formData.message);
+      payload.append('user_id', user?.id || '');
+      payload.append('page_url', window.location.pathname);
+      if (attachment) {
+        payload.append('attachment', attachment);
+      }
+
+      await submitFeedback(payload);
 
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
         onClose();
         setFormData({ subject: 'question', message: '' });
+        setAttachment(null);
       }, 2000);
     } catch (err) {
       setError(getErrorMessage(err, 'Submit failed'));
@@ -56,6 +71,24 @@ function FeedbackModal({ isOpen, onClose }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be under 5MB.');
+        e.target.value = '';
+        return;
+      }
+      setAttachment(file);
+      setError('');
+    }
+  };
+
+  const removeAttachment = () => {
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   if (!isOpen) return null;
@@ -115,17 +148,55 @@ function FeedbackModal({ isOpen, onClose }) {
             </div>
 
             <div className="feedback-form-group">
-              <label htmlFor="message">Message *</label>
+              <div className="feedback-message-header">
+                <label htmlFor="message">Message *</label>
+                <button
+                  type="button"
+                  className="feedback-upload-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={submitting}
+                  title="Attach a screenshot or image"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                  </svg>
+                  Attach File
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                />
+              </div>
               <textarea
                 id="message"
                 name="message"
                 value={formData.message}
                 onChange={handleChange}
                 required
+                minLength={20}
                 rows="6"
-                placeholder="Please describe your question, bug, or suggestion..."
+                placeholder="Describe the issue or suggestion..."
                 disabled={submitting}
               />
+              <span className="feedback-char-count" style={{ color: formData.message.trim().length < 20 ? '#999' : '#4CAF50' }}>
+                {formData.message.trim().length}/20 min
+              </span>
+              {attachment && (
+                <div className="feedback-attachment-preview">
+                  <span className="feedback-attachment-name" title={attachment.name}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                    </svg>
+                    {attachment.name}
+                  </span>
+                  <button type="button" className="feedback-attachment-remove" onClick={removeAttachment} title="Remove attachment">
+                    &times;
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="feedback-modal-actions">
