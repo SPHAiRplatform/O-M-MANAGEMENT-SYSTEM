@@ -39,6 +39,7 @@ function PlatformAnalytics() {
   const [analytics, setAnalytics] = useState(null);
   const [timeRange, setTimeRange] = useState('30d');
   const [performerSort, setPerformerSort] = useState({ key: 'overallScore', dir: 'desc' });
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
   useEffect(() => {
     if (!isSuperAdmin()) {
@@ -413,6 +414,112 @@ function PlatformAnalytics() {
     return { avgCompletion, avgOnTime, avgQuality, workloadBalance };
   };
 
+  // --- Download / Export helpers ---
+
+  const downloadCSV = (filename, csvContent) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const escapeCSV = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const handleDownloadIndividual = () => {
+    const performers = getSortedPerformers();
+    if (performers.length === 0) return;
+
+    const timeLabel = timeRange === '7d' ? 'Last 7 Days' : timeRange === '30d' ? 'Last 30 Days' : timeRange === '90d' ? 'Last 90 Days' : 'Last Year';
+    const summary = getPerformerSummary();
+    const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    let csv = `Individual Performance Report\n`;
+    csv += `Generated: ${dateStr}\n`;
+    csv += `Period: ${timeLabel}\n`;
+    csv += `Total Employees: ${performers.length}\n`;
+    csv += `\n`;
+    csv += `TEAM SUMMARY\n`;
+    csv += `Avg Completion Rate,${summary.avgCompletion}%\n`;
+    csv += `Avg On-Time Rate,${summary.avgOnTime}%\n`;
+    csv += `Avg Quality Score,${summary.avgQuality}%\n`;
+    csv += `Workload Balance,${summary.workloadBalance}\n`;
+    csv += `\n`;
+    csv += `INDIVIDUAL BREAKDOWN\n`;
+    csv += `Rank,Employee,Role,Organization,Tasks Assigned,Tasks Completed,Completion %,On-Time %,Quality %,Avg Hours,Flagged,Overall Score\n`;
+
+    performers.forEach((p, idx) => {
+      csv += [
+        idx + 1,
+        escapeCSV(p.name),
+        escapeCSV(p.role?.replace('_', ' ')),
+        escapeCSV(p.organization),
+        p.totalAssigned,
+        p.completed,
+        `${p.completionRate}%`,
+        `${p.onTimeRate}%`,
+        `${p.qualityScore}%`,
+        p.avgHours !== null ? `${p.avgHours}h` : '-',
+        p.flagged,
+        p.overallScore
+      ].join(',') + '\n';
+    });
+
+    const fileName = `Individual_Performance_${timeRange}_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(fileName, csv);
+    setShowDownloadMenu(false);
+  };
+
+  const handleDownloadCompany = () => {
+    const orgs = analytics?.organizations || [];
+    if (orgs.length === 0) return;
+
+    const timeLabel = timeRange === '7d' ? 'Last 7 Days' : timeRange === '30d' ? 'Last 30 Days' : timeRange === '90d' ? 'Last 90 Days' : 'Last Year';
+    const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const overview = analytics?.overview;
+
+    let csv = `Company Performance Report\n`;
+    csv += `Generated: ${dateStr}\n`;
+    csv += `Period: ${timeLabel}\n`;
+    csv += `\n`;
+    csv += `PLATFORM OVERVIEW\n`;
+    csv += `Total Organizations,${overview?.organizations?.total || 0}\n`;
+    csv += `Active Organizations,${overview?.organizations?.active || 0}\n`;
+    csv += `Total Users,${overview?.users?.total || 0}\n`;
+    csv += `Total Tasks,${overview?.tasks?.total || 0}\n`;
+    csv += `Tasks Completed,${overview?.tasks?.completed || 0}\n`;
+    csv += `Overall Completion Rate,${overview?.tasks?.total > 0 ? Math.round((overview.tasks.completed / overview.tasks.total) * 100) : 0}%\n`;
+    csv += `\n`;
+    csv += `ORGANIZATION BREAKDOWN\n`;
+    csv += `Organization,Slug,Users,Total Tasks,Completed Tasks,Completion Rate\n`;
+
+    [...orgs].sort((a, b) => b.completion_rate - a.completion_rate).forEach(org => {
+      csv += [
+        escapeCSV(org.name),
+        escapeCSV(org.slug),
+        org.user_count,
+        org.task_count,
+        org.completed_tasks,
+        `${org.completion_rate}%`
+      ].join(',') + '\n';
+    });
+
+    const fileName = `Company_Performance_${timeRange}_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(fileName, csv);
+    setShowDownloadMenu(false);
+  };
+
   // Top Performers Chart
   const getTopPerformersChartData = () => {
     const performers = analytics?.performers || [];
@@ -760,12 +867,45 @@ function PlatformAnalytics() {
       {/* ═══════════════════════════════════════════════════════════════ */}
 
       <div className="performance-divider">
-        <h2 className="performance-divider-title">
-          <i className="fas fa-user-chart"></i> Individual Performance KPIs
-        </h2>
-        <p className="performance-divider-subtitle">
-          Assess employee performance, identify top performers, and monitor workload balance across teams
-        </p>
+        <div className="performance-divider-header">
+          <div>
+            <h2 className="performance-divider-title">
+              <i className="fas fa-user-chart"></i> Individual Performance KPIs
+            </h2>
+            <p className="performance-divider-subtitle">
+              Assess employee performance, identify top performers, and monitor workload balance across teams
+            </p>
+          </div>
+          <div className="performance-download-wrapper">
+            <button
+              className="btn-download-performance"
+              onClick={() => setShowDownloadMenu(prev => !prev)}
+            >
+              <i className="fas fa-download"></i> Download Report
+            </button>
+            {showDownloadMenu && (
+              <>
+                <div className="download-menu-backdrop" onClick={() => setShowDownloadMenu(false)} />
+                <div className="download-menu">
+                  <button className="download-menu-item" onClick={handleDownloadIndividual}>
+                    <i className="fas fa-users"></i>
+                    <div>
+                      <span className="download-menu-label">Individual Performance</span>
+                      <span className="download-menu-desc">All employees with KPI scores</span>
+                    </div>
+                  </button>
+                  <button className="download-menu-item" onClick={handleDownloadCompany}>
+                    <i className="fas fa-building"></i>
+                    <div>
+                      <span className="download-menu-label">Company Performance</span>
+                      <span className="download-menu-desc">All organizations overview</span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Performance Summary KPIs */}
