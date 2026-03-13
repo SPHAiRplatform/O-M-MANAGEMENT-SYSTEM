@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getApiBaseUrl, authFetch } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
+import * as XLSX from 'xlsx';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -40,6 +41,9 @@ function PlatformAnalytics() {
   const [timeRange, setTimeRange] = useState('30d');
   const [performerSort, setPerformerSort] = useState({ key: 'overallScore', dir: 'desc' });
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [downloadStep, setDownloadStep] = useState('choose'); // 'choose' | 'selectCompany'
+  const [selectedDownloadOrg, setSelectedDownloadOrg] = useState('all');
+  const downloadRef = useRef(null);
 
   useEffect(() => {
     if (!isSuperAdmin()) {
@@ -414,110 +418,195 @@ function PlatformAnalytics() {
     return { avgCompletion, avgOnTime, avgQuality, workloadBalance };
   };
 
-  // --- Download / Export helpers ---
+  // --- Download / Export helpers (Excel) ---
 
-  const downloadCSV = (filename, csvContent) => {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const getTimeLabel = () => {
+    if (timeRange === '7d') return 'Last 7 Days';
+    if (timeRange === '30d') return 'Last 30 Days';
+    if (timeRange === '90d') return 'Last 90 Days';
+    return 'Last Year';
   };
 
-  const escapeCSV = (val) => {
-    if (val === null || val === undefined) return '';
-    const str = String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
+  const setColWidths = (ws, widths) => {
+    ws['!cols'] = widths.map(w => ({ wch: w }));
+  };
+
+  const closeDownloadMenu = () => {
+    setShowDownloadMenu(false);
+    setDownloadStep('choose');
+    setSelectedDownloadOrg('all');
   };
 
   const handleDownloadIndividual = () => {
-    const performers = getSortedPerformers();
-    if (performers.length === 0) return;
+    setDownloadStep('selectCompany');
+  };
 
-    const timeLabel = timeRange === '7d' ? 'Last 7 Days' : timeRange === '30d' ? 'Last 30 Days' : timeRange === '90d' ? 'Last 90 Days' : 'Last Year';
-    const summary = getPerformerSummary();
+  const handleGenerateIndividualExcel = () => {
+    const allPerformers = getSortedPerformers();
+    if (allPerformers.length === 0) return;
+
+    const orgFilter = selectedDownloadOrg;
+    const performers = orgFilter === 'all'
+      ? allPerformers
+      : allPerformers.filter(p => p.organization === orgFilter);
+
+    if (performers.length === 0) { closeDownloadMenu(); return; }
+
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const orgName = orgFilter === 'all' ? 'All Companies' : orgFilter;
 
-    let csv = `Individual Performance Report\n`;
-    csv += `Generated: ${dateStr}\n`;
-    csv += `Period: ${timeLabel}\n`;
-    csv += `Total Employees: ${performers.length}\n`;
-    csv += `\n`;
-    csv += `TEAM SUMMARY\n`;
-    csv += `Avg Completion Rate,${summary.avgCompletion}%\n`;
-    csv += `Avg On-Time Rate,${summary.avgOnTime}%\n`;
-    csv += `Avg Quality Score,${summary.avgQuality}%\n`;
-    csv += `Workload Balance,${summary.workloadBalance}\n`;
-    csv += `\n`;
-    csv += `INDIVIDUAL BREAKDOWN\n`;
-    csv += `Rank,Employee,Role,Organization,Tasks Assigned,Tasks Completed,Completion %,On-Time %,Quality %,Avg Hours,Flagged,Overall Score\n`;
+    // Calc summary for filtered set
+    const avgCompletion = Math.round(performers.reduce((s, p) => s + p.completionRate, 0) / performers.length);
+    const avgOnTime = Math.round(performers.reduce((s, p) => s + p.onTimeRate, 0) / performers.length);
+    const avgQuality = Math.round(performers.reduce((s, p) => s + p.qualityScore, 0) / performers.length);
+    const avgWorkload = performers.reduce((s, p) => s + p.totalAssigned, 0) / performers.length;
+    const variance = performers.reduce((s, p) => s + Math.pow(p.totalAssigned - avgWorkload, 2), 0) / performers.length;
+    const cv = avgWorkload > 0 ? (Math.sqrt(variance) / avgWorkload) * 100 : 0;
+    const workloadBalance = cv <= 25 ? 'Well Balanced' : cv <= 50 ? 'Moderate' : 'Imbalanced';
 
-    performers.forEach((p, idx) => {
-      csv += [
-        idx + 1,
-        escapeCSV(p.name),
-        escapeCSV(p.role?.replace('_', ' ')),
-        escapeCSV(p.organization),
-        p.totalAssigned,
-        p.completed,
-        `${p.completionRate}%`,
-        `${p.onTimeRate}%`,
-        `${p.qualityScore}%`,
-        p.avgHours !== null ? `${p.avgHours}h` : '-',
-        p.flagged,
-        p.overallScore
-      ].join(',') + '\n';
-    });
+    const wb = XLSX.utils.book_new();
 
-    const fileName = `Individual_Performance_${timeRange}_${new Date().toISOString().split('T')[0]}.csv`;
-    downloadCSV(fileName, csv);
-    setShowDownloadMenu(false);
+    // --- Sheet 1: Summary ---
+    const summaryData = [
+      ['INDIVIDUAL PERFORMANCE REPORT'],
+      [],
+      ['Company', orgName],
+      ['Generated', dateStr],
+      ['Period', getTimeLabel()],
+      ['Total Employees', performers.length],
+      [],
+      ['TEAM SUMMARY'],
+      ['Metric', 'Value'],
+      ['Avg Completion Rate', `${avgCompletion}%`],
+      ['Avg On-Time Rate', `${avgOnTime}%`],
+      ['Avg Quality Score', `${avgQuality}%`],
+      ['Workload Balance', workloadBalance],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    setColWidths(wsSummary, [28, 22]);
+    wsSummary['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+    // --- Sheet 2: Individual Scores ---
+    const headers = ['Rank', 'Employee', 'Role', 'Organization', 'Tasks Assigned', 'Tasks Completed', 'Completion %', 'On-Time %', 'Quality %', 'Avg Hours', 'Flagged', 'Overall Score'];
+    const rows = performers.map((p, idx) => [
+      idx + 1,
+      p.name,
+      (p.role || '').replace('_', ' '),
+      p.organization,
+      p.totalAssigned,
+      p.completed,
+      p.completionRate,
+      p.onTimeRate,
+      p.qualityScore,
+      p.avgHours !== null ? p.avgHours : '-',
+      p.flagged,
+      p.overallScore
+    ]);
+    const wsScores = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    setColWidths(wsScores, [6, 24, 16, 24, 14, 16, 14, 12, 12, 12, 10, 14]);
+    XLSX.utils.book_append_sheet(wb, wsScores, 'Performance Scores');
+
+    // --- Sheet 3: Performance Tiers ---
+    const high = performers.filter(p => p.overallScore >= 80);
+    const mid = performers.filter(p => p.overallScore >= 50 && p.overallScore < 80);
+    const low = performers.filter(p => p.overallScore < 50);
+    const tierData = [
+      ['PERFORMANCE TIERS'],
+      [],
+      ['Tier', 'Count', '% of Total'],
+      ['High Performers (80+)', high.length, `${Math.round(high.length / performers.length * 100)}%`],
+      ['Average Performers (50-79)', mid.length, `${Math.round(mid.length / performers.length * 100)}%`],
+      ['Needs Improvement (<50)', low.length, `${Math.round(low.length / performers.length * 100)}%`],
+      [],
+      ['HIGH PERFORMERS'],
+      ['Employee', 'Score', 'Completion %', 'On-Time %', 'Quality %'],
+      ...high.sort((a, b) => b.overallScore - a.overallScore).map(p => [p.name, p.overallScore, `${p.completionRate}%`, `${p.onTimeRate}%`, `${p.qualityScore}%`]),
+      [],
+      ['NEEDS IMPROVEMENT'],
+      ['Employee', 'Score', 'Completion %', 'On-Time %', 'Quality %'],
+      ...low.sort((a, b) => a.overallScore - b.overallScore).map(p => [p.name, p.overallScore, `${p.completionRate}%`, `${p.onTimeRate}%`, `${p.qualityScore}%`]),
+    ];
+    const wsTiers = XLSX.utils.aoa_to_sheet(tierData);
+    setColWidths(wsTiers, [30, 10, 14, 12, 12]);
+    XLSX.utils.book_append_sheet(wb, wsTiers, 'Performance Tiers');
+
+    const safeName = orgName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
+    XLSX.writeFile(wb, `Individual_Performance_${safeName}_${timeRange}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    closeDownloadMenu();
   };
 
   const handleDownloadCompany = () => {
     const orgs = analytics?.organizations || [];
     if (orgs.length === 0) return;
 
-    const timeLabel = timeRange === '7d' ? 'Last 7 Days' : timeRange === '30d' ? 'Last 30 Days' : timeRange === '90d' ? 'Last 90 Days' : 'Last Year';
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const overview = analytics?.overview;
+    const performers = analytics?.performers || [];
 
-    let csv = `Company Performance Report\n`;
-    csv += `Generated: ${dateStr}\n`;
-    csv += `Period: ${timeLabel}\n`;
-    csv += `\n`;
-    csv += `PLATFORM OVERVIEW\n`;
-    csv += `Total Organizations,${overview?.organizations?.total || 0}\n`;
-    csv += `Active Organizations,${overview?.organizations?.active || 0}\n`;
-    csv += `Total Users,${overview?.users?.total || 0}\n`;
-    csv += `Total Tasks,${overview?.tasks?.total || 0}\n`;
-    csv += `Tasks Completed,${overview?.tasks?.completed || 0}\n`;
-    csv += `Overall Completion Rate,${overview?.tasks?.total > 0 ? Math.round((overview.tasks.completed / overview.tasks.total) * 100) : 0}%\n`;
-    csv += `\n`;
-    csv += `ORGANIZATION BREAKDOWN\n`;
-    csv += `Organization,Slug,Users,Total Tasks,Completed Tasks,Completion Rate\n`;
+    const wb = XLSX.utils.book_new();
 
-    [...orgs].sort((a, b) => b.completion_rate - a.completion_rate).forEach(org => {
-      csv += [
-        escapeCSV(org.name),
-        escapeCSV(org.slug),
-        org.user_count,
-        org.task_count,
-        org.completed_tasks,
-        `${org.completion_rate}%`
-      ].join(',') + '\n';
+    // --- Sheet 1: Platform Overview ---
+    const overviewData = [
+      ['COMPANY PERFORMANCE REPORT'],
+      [],
+      ['Generated', dateStr],
+      ['Period', getTimeLabel()],
+      [],
+      ['PLATFORM OVERVIEW'],
+      ['Metric', 'Value'],
+      ['Total Organizations', overview?.organizations?.total || 0],
+      ['Active Organizations', overview?.organizations?.active || 0],
+      ['Total Users', overview?.users?.total || 0],
+      ['Total Tasks', overview?.tasks?.total || 0],
+      ['Tasks Completed', overview?.tasks?.completed || 0],
+      ['Overall Completion Rate', `${overview?.tasks?.total > 0 ? Math.round((overview.tasks.completed / overview.tasks.total) * 100) : 0}%`],
+    ];
+    const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+    setColWidths(wsOverview, [28, 22]);
+    wsOverview['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+    XLSX.utils.book_append_sheet(wb, wsOverview, 'Platform Overview');
+
+    // --- Sheet 2: Organization Breakdown ---
+    const orgHeaders = ['Organization', 'Slug', 'Users', 'Total Tasks', 'Completed Tasks', 'Completion Rate', 'Performance Level'];
+    const orgRows = [...orgs].sort((a, b) => b.completion_rate - a.completion_rate).map(org => [
+      org.name,
+      org.slug,
+      org.user_count,
+      org.task_count,
+      org.completed_tasks,
+      org.completion_rate,
+      org.completion_rate >= 80 ? 'High' : org.completion_rate >= 50 ? 'Average' : 'Needs Improvement'
+    ]);
+    const wsOrgs = XLSX.utils.aoa_to_sheet([orgHeaders, ...orgRows]);
+    setColWidths(wsOrgs, [28, 20, 8, 12, 16, 16, 18]);
+    XLSX.utils.book_append_sheet(wb, wsOrgs, 'Organizations');
+
+    // --- Sheet 3: Per-Organization Employee Summary ---
+    const orgEmployeeRows = [['Organization', 'Employee', 'Role', 'Tasks Assigned', 'Completed', 'Completion %', 'On-Time %', 'Quality %', 'Overall Score']];
+    const sortedOrgs = [...orgs].sort((a, b) => a.name.localeCompare(b.name));
+    sortedOrgs.forEach(org => {
+      const orgPerformers = performers.filter(p => p.organization === org.name).sort((a, b) => b.overallScore - a.overallScore);
+      orgPerformers.forEach(p => {
+        orgEmployeeRows.push([
+          org.name,
+          p.name,
+          (p.role || '').replace('_', ' '),
+          p.totalAssigned,
+          p.completed,
+          p.completionRate,
+          p.onTimeRate,
+          p.qualityScore,
+          p.overallScore
+        ]);
+      });
     });
+    const wsEmp = XLSX.utils.aoa_to_sheet(orgEmployeeRows);
+    setColWidths(wsEmp, [28, 24, 16, 14, 12, 14, 12, 12, 14]);
+    XLSX.utils.book_append_sheet(wb, wsEmp, 'Employees by Company');
 
-    const fileName = `Company_Performance_${timeRange}_${new Date().toISOString().split('T')[0]}.csv`;
-    downloadCSV(fileName, csv);
-    setShowDownloadMenu(false);
+    XLSX.writeFile(wb, `Company_Performance_${timeRange}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    closeDownloadMenu();
   };
 
   // Top Performers Chart
@@ -876,31 +965,77 @@ function PlatformAnalytics() {
               Assess employee performance, identify top performers, and monitor workload balance across teams
             </p>
           </div>
-          <div className="performance-download-wrapper">
+          <div className="performance-download-wrapper" ref={downloadRef}>
             <button
               className="btn-download-performance"
-              onClick={() => setShowDownloadMenu(prev => !prev)}
+              onClick={() => { setShowDownloadMenu(prev => !prev); setDownloadStep('choose'); }}
             >
               <i className="fas fa-download"></i> Download Report
             </button>
             {showDownloadMenu && (
               <>
-                <div className="download-menu-backdrop" onClick={() => setShowDownloadMenu(false)} />
+                <div className="download-menu-backdrop" onClick={closeDownloadMenu} />
                 <div className="download-menu">
-                  <button className="download-menu-item" onClick={handleDownloadIndividual}>
-                    <i className="fas fa-users"></i>
-                    <div>
-                      <span className="download-menu-label">Individual Performance</span>
-                      <span className="download-menu-desc">All employees with KPI scores</span>
+                  {downloadStep === 'choose' && (
+                    <>
+                      <button className="download-menu-item" onClick={handleDownloadIndividual}>
+                        <i className="fas fa-users"></i>
+                        <div>
+                          <span className="download-menu-label">Individual Performance</span>
+                          <span className="download-menu-desc">Employee KPI scores (.xlsx)</span>
+                        </div>
+                      </button>
+                      <button className="download-menu-item" onClick={handleDownloadCompany}>
+                        <i className="fas fa-building"></i>
+                        <div>
+                          <span className="download-menu-label">Company Performance</span>
+                          <span className="download-menu-desc">All organizations overview (.xlsx)</span>
+                        </div>
+                      </button>
+                    </>
+                  )}
+                  {downloadStep === 'selectCompany' && (
+                    <div className="download-company-select">
+                      <div className="download-menu-header">
+                        <button className="download-back-btn" onClick={() => setDownloadStep('choose')}>
+                          <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <span>Select Company</span>
+                      </div>
+                      <div className="download-org-list">
+                        <label className={`download-org-option ${selectedDownloadOrg === 'all' ? 'selected' : ''}`}>
+                          <input
+                            type="radio"
+                            name="downloadOrg"
+                            value="all"
+                            checked={selectedDownloadOrg === 'all'}
+                            onChange={() => setSelectedDownloadOrg('all')}
+                          />
+                          <i className="fas fa-globe"></i>
+                          <span>All Companies</span>
+                        </label>
+                        {(analytics?.organizations || []).map(org => (
+                          <label
+                            key={org.id}
+                            className={`download-org-option ${selectedDownloadOrg === org.name ? 'selected' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name="downloadOrg"
+                              value={org.name}
+                              checked={selectedDownloadOrg === org.name}
+                              onChange={() => setSelectedDownloadOrg(org.name)}
+                            />
+                            <i className="fas fa-building"></i>
+                            <span>{org.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <button className="download-generate-btn" onClick={handleGenerateIndividualExcel}>
+                        <i className="fas fa-file-excel"></i> Generate Excel
+                      </button>
                     </div>
-                  </button>
-                  <button className="download-menu-item" onClick={handleDownloadCompany}>
-                    <i className="fas fa-building"></i>
-                    <div>
-                      <span className="download-menu-label">Company Performance</span>
-                      <span className="download-menu-desc">All organizations overview</span>
-                    </div>
-                  </button>
+                  )}
                 </div>
               </>
             )}
