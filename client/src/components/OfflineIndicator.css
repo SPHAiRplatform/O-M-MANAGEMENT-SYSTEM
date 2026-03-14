@@ -4,15 +4,20 @@
   left: 0;
   right: 0;
   z-index: 10000;
-  background: #fff;
-  border-bottom: 2px solid #ddd;
-  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  /* Hidden by default — only visible when a status class is added */
+  display: none;
+}
+
+.offline-indicator.visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #fff;
+  border-bottom: 2px solid #ddd;
+  padding: 8px 16px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  font-size: 13px;
-  font-weight: 500;
 }
 
 .offline-indicator.offline {
