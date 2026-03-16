@@ -513,9 +513,13 @@ function Dashboard() {
 
         const combinedActivities = [
           // Calendar events — cross-reference with tasks for status
+          // No matching task or task not started = "pending"
+          // Task started = "in_progress", Task done = "completed"
           ...events.map(event => {
             const code = event.procedure_code || event.task_code || null;
             const matchedStatus = code ? taskStatusMap[normalizeCode(code)] : null;
+            // Default to 'pending' if no task exists or task hasn't started
+            const resolvedStatus = matchedStatus || 'pending';
             return {
               id: `event-${event.id}`,
               title: event.task_title || event.event_name || 'Untitled Event',
@@ -525,7 +529,7 @@ function Dashboard() {
               frequency: event.frequency,
               color: getEventColor(event),
               task_code: code,
-              status: matchedStatus || null
+              status: resolvedStatus
             };
           }),
           // Tasks scheduled for today
@@ -535,7 +539,7 @@ function Dashboard() {
             description: task.location ? `Location: ${task.location}` : null,
             event_date: task.scheduled_date,
             type: 'task',
-            status: task.status,
+            status: task.status || 'pending',
             task_code: task.task_code,
             frequency: task.frequency || null,
             color: task.frequency ? (FREQUENCY_COLORS[task.frequency.toLowerCase()] || '#3498db') : '#3498db'
