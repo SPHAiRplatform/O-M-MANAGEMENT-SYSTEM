@@ -1058,29 +1058,25 @@ function Dashboard() {
                           borderLeftWidth: '4px'
                         }}
                       >
-                        <div className="activity-item-row">
-                          <div className="activity-item-info">
-                            <div className="activity-title">
-                              {activity.title || activity.event_name || 'Untitled Event'}
-                              {activity.task_code && (
-                                <span className="activity-task-code">
-                                  {activity.task_code}
-                                </span>
-                              )}
-                            </div>
-                            {activity.description && (
-                              <div className="activity-description">{activity.description}</div>
-                            )}
-                          </div>
-                          {statusLabel && (
-                            <span
-                              className="activity-status-badge"
-                              style={{ background: statusColor, color: '#fff' }}
-                            >
-                              {statusLabel}
+                        <div className="activity-title">
+                          {activity.title || activity.event_name || 'Untitled Event'}
+                          {activity.task_code && (
+                            <span className="activity-task-code">
+                              {activity.task_code}
                             </span>
                           )}
                         </div>
+                        {activity.description && (
+                          <div className="activity-description">{activity.description}</div>
+                        )}
+                        {statusLabel && (
+                          <span
+                            className="activity-status-badge"
+                            style={{ background: statusColor, color: activity.status === 'pending' ? '#333' : '#fff' }}
+                          >
+                            {statusLabel}
+                          </span>
+                        )}
                       </li>
                     );
                   })}
