@@ -57,10 +57,13 @@ function OfflineIndicator() {
     };
   }, []);
 
-  const shouldShow = !isOnline || pendingCount > 0 || syncStatus !== 'idle' || syncProgress;
+  // Render absolutely nothing when online and idle — no DOM element at all
+  if (isOnline && pendingCount === 0 && syncStatus === 'idle' && !syncProgress) {
+    return null;
+  }
 
   return (
-    <div className={`offline-indicator ${shouldShow ? 'visible' : ''} ${!isOnline ? 'offline' : ''} ${syncStatus === 'syncing' ? 'syncing' : ''}`}>
+    <div className={`offline-indicator ${!isOnline ? 'offline' : ''} ${syncStatus === 'syncing' ? 'syncing' : ''}`}>
       {!isOnline ? (
         <div className="offline-status">
           <span className="offline-icon">⚠</span>

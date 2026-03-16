@@ -1,16 +1,11 @@
 .offline-indicator {
   position: fixed;
-  top: 0;
+  top: 60px;
   left: 0;
   right: 0;
-  z-index: 10000;
+  z-index: 9999;
   font-size: 13px;
   font-weight: 500;
-  /* Hidden by default — only visible when a status class is added */
-  display: none;
-}
-
-.offline-indicator.visible {
   display: flex;
   align-items: center;
   justify-content: center;
