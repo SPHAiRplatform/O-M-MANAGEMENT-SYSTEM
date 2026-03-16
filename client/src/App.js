@@ -33,7 +33,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import PasswordChangeModal from './components/PasswordChangeModal';
 // LicenseStatus removed - no longer needed
 // import LicenseStatus from './components/LicenseStatus';
-import OfflineIndicator from './components/OfflineIndicator';
+// OfflineIndicator removed - caused visual glitch (checkmark flicker)
+// import OfflineIndicator from './components/OfflineIndicator';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import FeedbackWidget from './components/FeedbackWidget';
 import { useInactivityTimeout } from './hooks/useInactivityTimeout';
@@ -182,7 +183,7 @@ function AppContent() {
 
   return (
     <>
-      <OfflineIndicator />
+      {/* OfflineIndicator removed - caused visual glitch */}
       {!showPasswordModal && <Header />}
       {/* LicenseStatus removed - no longer needed */}
       {/* {!showPasswordModal && <LicenseStatus />} */}
