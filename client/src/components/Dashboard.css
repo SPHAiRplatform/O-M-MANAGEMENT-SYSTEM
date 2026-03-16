@@ -458,6 +458,41 @@
   line-height: 1.4;
 }
 
+.activity-item-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activity-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-task-code {
+  display: inline-block;
+  font-size: 11px;
+  font-family: monospace;
+  color: #fff;
+  background: #6c757d;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+.activity-status-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
 .activity-description {
   font-size: 14px;
   color: var(--md-text-main);

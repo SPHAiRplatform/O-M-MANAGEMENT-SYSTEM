@@ -502,17 +502,32 @@ function Dashboard() {
         });
         
         // Combine calendar events and tasks
+        // Build a lookup of task status by normalised task code (PM-005, PM 005 → pm005)
+        const normalizeCode = (code) => (code || '').replace(/[\s-]/g, '').toLowerCase();
+        const taskStatusMap = {};
+        tasks.forEach(task => {
+          if (task.task_code) {
+            taskStatusMap[normalizeCode(task.task_code)] = task.status;
+          }
+        });
+
         const combinedActivities = [
-          // Calendar events
-          ...events.map(event => ({
-            id: `event-${event.id}`,
-            title: event.task_title || event.event_name || 'Untitled Event',
-            description: event.description,
-            event_date: event.event_date,
-            type: 'calendar_event',
-            frequency: event.frequency,
-            color: getEventColor(event)
-          })),
+          // Calendar events — cross-reference with tasks for status
+          ...events.map(event => {
+            const code = event.procedure_code || event.task_code || null;
+            const matchedStatus = code ? taskStatusMap[normalizeCode(code)] : null;
+            return {
+              id: `event-${event.id}`,
+              title: event.task_title || event.event_name || 'Untitled Event',
+              description: event.description,
+              event_date: event.event_date,
+              type: 'calendar_event',
+              frequency: event.frequency,
+              color: getEventColor(event),
+              task_code: code,
+              status: matchedStatus || null
+            };
+          }),
           // Tasks scheduled for today
           ...todayTasks.map(task => ({
             id: `task-${task.id}`,
@@ -523,7 +538,6 @@ function Dashboard() {
             status: task.status,
             task_code: task.task_code,
             frequency: task.frequency || null,
-            // For tasks, try to get color from template frequency or default
             color: task.frequency ? (FREQUENCY_COLORS[task.frequency.toLowerCase()] || '#3498db') : '#3498db'
           }))
         ];
@@ -1025,37 +1039,44 @@ function Dashboard() {
                 <ul>
                   {todayActivities.map((activity, index) => {
                     const activityColor = activity.color || '#3498db';
+                    const statusColor = activity.status === 'completed' ? '#28a745' :
+                                        activity.status === 'in_progress' ? '#17a2b8' :
+                                        activity.status === 'pending' ? '#ffc107' : null;
+                    const statusLabel = activity.status
+                      ? activity.status.charAt(0).toUpperCase() + activity.status.slice(1).replace('_', ' ')
+                      : null;
                     return (
-                      <li 
-                        key={activity.id || index} 
+                      <li
+                        key={activity.id || index}
                         className="activity-item"
                         style={{
                           borderLeftColor: activityColor,
                           borderLeftWidth: '4px'
                         }}
                       >
-                        <div className="activity-title">
-                          {activity.title || activity.event_name || 'Untitled Event'}
-                          {activity.type === 'task' && activity.task_code && (
-                            <span style={{ fontSize: '13px', color: '#666', marginLeft: '6px', fontFamily: 'monospace' }}>
-                              ({activity.task_code})
+                        <div className="activity-item-row">
+                          <div className="activity-item-info">
+                            <div className="activity-title">
+                              {activity.title || activity.event_name || 'Untitled Event'}
+                              {activity.task_code && (
+                                <span className="activity-task-code">
+                                  {activity.task_code}
+                                </span>
+                              )}
+                            </div>
+                            {activity.description && (
+                              <div className="activity-description">{activity.description}</div>
+                            )}
+                          </div>
+                          {statusLabel && (
+                            <span
+                              className="activity-status-badge"
+                              style={{ background: statusColor, color: '#fff' }}
+                            >
+                              {statusLabel}
                             </span>
                           )}
                         </div>
-                        {activity.description && (
-                          <div className="activity-description">{activity.description}</div>
-                        )}
-                        {activity.type === 'task' && activity.status && (
-                          <div className="activity-status" style={{
-                            fontSize: '13px',
-                            color: activity.status === 'completed' ? '#28a745' : 
-                                   activity.status === 'in_progress' ? '#17a2b8' : '#ffc107',
-                            fontWeight: '500',
-                            marginTop: '2px'
-                          }}>
-                            {activity.status.charAt(0).toUpperCase() + activity.status.slice(1).replace('_', ' ')}
-                          </div>
-                        )}
                       </li>
                     );
                   })}
