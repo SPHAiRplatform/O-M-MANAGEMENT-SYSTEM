@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 // Load logger and environment utilities FIRST (before other modules that might use console.log)
 const logger = require('./utils/logger');
