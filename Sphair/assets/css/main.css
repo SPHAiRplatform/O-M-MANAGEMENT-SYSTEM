@@ -3217,10 +3217,12 @@ section,
 
 .pricing .price-card .card-head .price-wrap .price {
   font-family: var(--heading-font);
-  color: var(--heading-color);
+  color: color-mix(in srgb, var(--heading-color), transparent 70%);
   font-weight: 800;
   line-height: 1;
   display: none;
+  filter: blur(5px);
+  user-select: none;
 }
 
 .pricing .price-card .card-head .price-wrap .price sup {
