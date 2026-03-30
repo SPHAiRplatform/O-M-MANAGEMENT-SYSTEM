@@ -1,6 +1,6 @@
 /**
 * SPHAiRDigital Marketing Website
-* Professional digital O&M system for solar power plant maintenance operations
+* Professional digital O&M system for renewable energy plant maintenance operations
 * Copyright © SPHAiRDigital. All Rights Reserved.
 */
 
@@ -154,8 +154,9 @@ h6 {
 }
 
 .header .logo img {
-  max-height: 36px;
-  margin-right: 8px;
+  max-height: 78px;
+  margin-right: 2px;
+  border-radius: 10px;
 }
 
 .header .logo h1 {
@@ -473,8 +474,9 @@ h6 {
 }
 
 .footer .footer-about .logo img {
-  max-height: 40px;
-  margin-right: 6px;
+  max-height: 68px;
+  margin-right: 2px;
+  border-radius: 10px;
 }
 
 .footer .footer-about .logo span {
@@ -954,6 +956,53 @@ section,
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Image Slideshow - crossfade animation for hero and about sections */
+.image-slideshow {
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+}
+
+.image-slideshow .slide-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  animation: crossfade 20s infinite;
+}
+
+.image-slideshow .slide-img:nth-child(1) { animation-delay: 0s; }
+.image-slideshow .slide-img:nth-child(2) { animation-delay: 5s; }
+.image-slideshow .slide-img:nth-child(3) { animation-delay: 10s; }
+.image-slideshow .slide-img:nth-child(4) { animation-delay: 15s; }
+
+@keyframes crossfade {
+  0%   { opacity: 0; }
+  5%   { opacity: 1; }
+  25%  { opacity: 1; }
+  30%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+.about .image-slideshow {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  min-height: 420px;
+}
+
+@media (max-width: 768px) {
+  .image-slideshow {
+    min-height: 280px;
+  }
+  .about .image-slideshow {
+    min-height: 280px;
+  }
 }
 
 .hero .hero-visual .floating-elements {
