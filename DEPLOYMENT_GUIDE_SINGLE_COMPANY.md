@@ -539,9 +539,19 @@ PLATFORM_SERVICE_TOKEN=[generate-random-string-here]
 FRONTEND_URL=https://yourdomain.com
 API_URL=https://api.yourdomain.com
 
-# Email Configuration (SendGrid - will configure in Step 6)
-SENDGRID_API_KEY=[will-add-later]
-SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+# Email Configuration (SMTP - configure in Step 6)
+EMAIL_ENABLED=true
+SMTP_HOST=[smtp host]
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=[smtp username]
+SMTP_PASS=[smtp password / smtp key]
+EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM_NAME=SPHAiRDigital
+APP_URL=https://yourdomain.com
+
+# Optional: SendGrid API key (if you use SendGrid SMTP as described later)
+# SENDGRID_API_KEY=[paste-your-api-key-here]
 
 # File Upload Configuration
 UPLOAD_MAX_SIZE=10485760
@@ -613,14 +623,69 @@ curl http://localhost:3001/api/platform/health
 
 ## Step 6: Email Service (SendGrid)
 
-### 6.1 Create SendGrid Account
+Recommended: **Brevo (SMTP)**. Follow the Brevo steps first; SendGrid is kept below as an optional alternative.
+
+### 6.1 (Recommended) Create Brevo Account (SMTP)
+
+1. Go to https://www.brevo.com
+2. Create an account
+3. Complete registration
+4. Verify email address (if prompted)
+
+### 6.2 Generate Brevo SMTP Credentials
+
+1. In Brevo dashboard, go to **SMTP & API settings / keys**
+2. Generate an **SMTP key**
+3. Use these SMTP settings:
+   - **SMTP_HOST:** `smtp-relay.brevo.com`
+   - **SMTP_PORT:** `587`
+   - **SMTP_SECURE:** `false`
+### 6.3 Update Environment File (Brevo)
+```bash
+# Edit .env file
+nano /opt/sphair/.env
+
+# Enable email sending
+EMAIL_ENABLED=true
+
+# Brevo SMTP settings
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=[your Brevo SMTP username/email]
+SMTP_PASS=[your Brevo SMTP key/password]
+
+# Sender identity
+EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM_NAME=SPHAiRDigital
+
+# Used for links inside email templates
+APP_URL=https://yourdomain.com
+
+# Save and exit
+```
+
+### 6.4 Restart Application
+```bash
+cd /opt/sphair
+docker-compose restart
+```
+
+### 6.5 Test Email (Optional)
+You can test email functionality by triggering a password reset or using a test endpoint if available.
+
+### 6.6 Optional: Use SendGrid (SMTP alternative)
+
+Cost note: Brevo’s free SMTP plan is commonly around **300 emails/day**, while SendGrid free/trial is often around **~100 emails/day** and may be time-limited—so Brevo is usually cheaper early on.
+
+### 6.6.1 Create SendGrid Account
 
 1. Go to https://sendgrid.com
 2. Click **Start for Free**
 3. Complete registration
 4. Verify email address
 
-### 6.2 Verify Sender Identity
+### 6.6.2 Verify Sender Identity
 
 1. In SendGrid dashboard, go to **Settings** → **Sender Authentication**
 2. Click **Verify a Single Sender**
@@ -632,7 +697,7 @@ curl http://localhost:3001/api/platform/health
 4. Click **Create**
 5. Check your email and click verification link
 
-### 6.3 Create API Key
+### 6.6.3 Create API Key (for SMTP)
 
 1. Go to **Settings** → **API Keys**
 2. Click **Create API Key**
@@ -641,27 +706,37 @@ curl http://localhost:3001/api/platform/health
 5. Click **Create & View**
 6. **IMPORTANT:** Copy the API key immediately (you won't see it again)
 
-### 6.4 Update Environment File
+### 6.6.4 Update Environment File (SendGrid SMTP)
 
 ```bash
 # Edit .env file
 nano /opt/sphair/.env
 
-# Add SendGrid API key
-SENDGRID_API_KEY=[paste-your-api-key-here]
-SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+# SendGrid SMTP settings
+EMAIL_ENABLED=true
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=apikey
+SMTP_PASS=[paste-your-sendgrid-api-key-here]
+
+EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM_NAME=SPHAiRDigital
+
+# Used for links inside email templates
+APP_URL=https://yourdomain.com
 
 # Save and exit
 ```
 
-### 6.5 Restart Application
+### 6.6.5 Restart Application
 
 ```bash
 cd /opt/sphair
 docker-compose restart
 ```
 
-### 6.6 Test Email (Optional)
+### 6.6.6 Test Email (Optional)
 
 You can test email functionality by triggering a password reset or using a test endpoint if available.
 
@@ -1215,6 +1290,7 @@ systemctl reload nginx
 - API: `https://yourdomain.com/api`
 - DigitalOcean Dashboard: https://cloud.digitalocean.com
 - Cloudflare Dashboard: https://dash.cloudflare.com
+- Brevo Dashboard: https://app.brevo.com
 - SendGrid Dashboard: https://app.sendgrid.com
 
 ---
@@ -1230,7 +1306,8 @@ systemctl reload nginx
 
 **Optional Services (Free Tiers Available):**
 - Cloudflare: Free
-- SendGrid: Free (100 emails/day)
+- Brevo: Free (often ~300 emails/day on free SMTP plan)
+- SendGrid: Free/trial is often ~100 emails/day and may be time-limited
 - UptimeRobot: Free (50 monitors)
 - Sentry: Free (5,000 events/month)
 
@@ -1252,6 +1329,7 @@ systemctl reload nginx
 
 - **DigitalOcean Documentation:** https://docs.digitalocean.com
 - **Cloudflare Documentation:** https://developers.cloudflare.com
+- **Brevo Documentation:** https://developers.brevo.com/
 - **SendGrid Documentation:** https://docs.sendgrid.com
 - **Docker Documentation:** https://docs.docker.com
 - **Nginx Documentation:** https://nginx.org/en/docs/

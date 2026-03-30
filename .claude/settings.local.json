@@ -23,7 +23,12 @@
       "Bash(npm info swagger-jsdoc@6.2.8 dependencies)",
       "Bash(node --version)",
       "Bash(npm --version)",
-      "Bash(npx -y node@18 -- -e \"console.log\\(process.version\\)\")"
+      "Bash(npx -y node@18 -- -e \"console.log\\(process.version\\)\")",
+      "Bash(git add client/src/components/Dashboard.css client/src/components/Dashboard.js)",
+      "Bash(git commit:*)",
+      "Bash(git push origin main)",
+      "Bash(git add:*)",
+      "Bash(ls /c/Users/mango/OneDrive/Documents/GitHub/SOLAR-MANAGEMENT-SYSTEM/client/src/components/*.js)"
     ]
   }
 }
