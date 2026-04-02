@@ -45,6 +45,14 @@ import syncManager from './utils/syncManager';
 import { loadAndApplyCompanyColors, resetCompanyColors } from './utils/companyColors';
 import './App.css';
 
+// Redirect /home to marketing site
+function RedirectToMarketing() {
+  useEffect(() => {
+    window.location.replace('/home/');
+  }, []);
+  return null;
+}
+
 // Helper component for redirects with route parameters
 function ParamRedirect({ to }) {
   const params = useParams();
@@ -201,6 +209,7 @@ function AppContent() {
       <div className="container">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/home" element={<RedirectToMarketing />} />
           
           {/* Platform Routes - System Owners Only */}
           <Route 
