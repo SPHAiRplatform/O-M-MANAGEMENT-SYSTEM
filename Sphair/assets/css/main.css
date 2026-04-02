@@ -151,12 +151,16 @@ h6 {
 
 .header .logo {
   line-height: 1;
+  /* Align with hero .row column text: half gutter + small nudge for scaled logo */
+  margin-left: calc(-0.8 * var(--bs-gutter-x, 1.5rem) - 10px);
 }
 
 .header .logo img {
-  max-height: 78px;
-  margin-right: 2px;
+  max-height: 88px;
+  margin-right: 3px;
   border-radius: 10px;
+  transform: scale(1.5);
+  transform-origin: left center;
 }
 
 .header .logo h1 {
@@ -186,6 +190,7 @@ h6 {
 @media (max-width: 1200px) {
   .header .logo {
     order: 1;
+    margin-left: 0;
   }
 
   .header .btn-getstarted {
@@ -474,8 +479,8 @@ h6 {
 }
 
 .footer .footer-about .logo img {
-  max-height: 68px;
-  margin-right: 2px;
+  max-height: 78px;
+  margin-right: -2px;
   border-radius: 10px;
 }
 
@@ -3456,6 +3461,27 @@ section,
 .contact .contact-info .info-item i {
   color: var(--accent-color);
   font-size: 1.4rem;
+}
+
+.contact .info-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.contact .info-item i {
+  color: var(--accent-color);
+  font-size: 1.4rem;
+}
+
+.contact .info-item h3 {
+  font-size: 1.1rem;
+  margin: 0 0 2px;
+}
+
+.contact .info-item p {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .contact .contact-info .map-link {
