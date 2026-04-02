@@ -151,16 +151,13 @@ h6 {
 
 .header .logo {
   line-height: 1;
-  /* Align with hero .row column text: half gutter + small nudge for scaled logo */
-  margin-left: calc(-0.8 * var(--bs-gutter-x, 1.5rem) - 10px);
 }
 
 .header .logo img {
   max-height: 88px;
-  margin-right: 4px;
+  margin-right: -8px;
   border-radius: 10px;
   transform: scale(1.4);
-  transform-origin: left center;
 }
 
 .header .logo h1 {
@@ -190,7 +187,6 @@ h6 {
 @media (max-width: 1200px) {
   .header .logo {
     order: 1;
-    margin-left: 0;
   }
 
   .header .btn-getstarted {
