@@ -157,9 +157,9 @@ h6 {
 
 .header .logo img {
   max-height: 88px;
-  margin-right: 3px;
+  margin-right: 4px;
   border-radius: 10px;
-  transform: scale(1.5);
+  transform: scale(1.4);
   transform-origin: left center;
 }
 
