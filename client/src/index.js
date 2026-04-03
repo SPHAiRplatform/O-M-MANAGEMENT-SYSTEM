@@ -12,16 +12,5 @@ root.render(
   </React.StrictMode>
 );
 
-// Register service worker for offline support and asset caching
-serviceWorkerRegistration.register({
-  onUpdate: (registration) => {
-    // When a new service worker is available, activate it immediately
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }
-  },
-  onSuccess: () => {
-    console.log('App is ready for offline use.');
-  },
-});
-
+// Unregister service worker so it does not intercept /home/ marketing site
+serviceWorkerRegistration.unregister();
