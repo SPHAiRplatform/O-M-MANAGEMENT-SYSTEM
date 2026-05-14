@@ -800,11 +800,9 @@ function UserManagement() {
                               <td data-label="Email">{user.email}</td>
                               <td data-label="Role">
                                 {(() => {
-                                  // Show creator (current user) as system_owner if they don't have explicit roles
-                                  const displayRoles = user.id === currentUser?.id && 
-                                    (!user.roles || user.roles.length === 0 || !user.roles.includes('system_owner'))
-                                    ? ['system_owner']
-                                    : (user.roles && Array.isArray(user.roles) ? user.roles : [user.role || 'technician']);
+                                  const displayRoles = (user.roles && Array.isArray(user.roles) && user.roles.length > 0)
+                                    ? user.roles
+                                    : [user.role || 'technician'];
                                   
                                   return displayRoles.length > 1 ? (
                                     <div className="roles-badges">
