@@ -109,6 +109,17 @@ module.exports = (pool) => {
       } catch (_) {}
 
       if (toEmail) {
+        // Read attachment into buffer before temp file is deleted
+        let attachments = [];
+        if (req.file) {
+          try {
+            const fileBuffer = fs.readFileSync(req.file.path);
+            attachments = [{ name: req.file.originalname, content: fileBuffer }];
+          } catch (fileErr) {
+            console.error('Could not read attachment for email:', fileErr.message);
+          }
+        }
+
         sendEmail({
           to: toEmail,
           subject: `[SPHAiRDigital Support] ${subjectLabels[subject] || subject} - ${userName}`,
@@ -122,8 +133,9 @@ module.exports = (pool) => {
             <hr>
             <p><strong>Message:</strong></p>
             <p>${message.replace(/\n/g, '<br>')}</p>
-            ${req.file ? '<p><em>See attached file.</em></p>' : ''}
-          `
+            ${req.file ? `<p><em>📎 Attachment: ${req.file.originalname}</em></p>` : ''}
+          `,
+          attachments
         }).catch(emailError => console.error('Error sending feedback email:', emailError));
       }
 

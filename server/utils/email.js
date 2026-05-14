@@ -10,15 +10,25 @@ const nodemailer = require('nodemailer');
 let transporter = null;
 
 // --- Brevo HTTP API sender ---
-function sendViaBrevoApi({ to, subject, html, text, from, fromName }) {
+// attachments: [{ name: 'file.png', content: <Buffer or base64 string>, type: 'image/png' }]
+function sendViaBrevoApi({ to, subject, html, text, from, fromName, attachments }) {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
+    const payload = {
       sender: { name: fromName, email: from },
       to: [{ email: to }],
       subject,
       htmlContent: html,
       textContent: text || html.replace(/<[^>]*>/g, '')
-    });
+    };
+
+    if (attachments && attachments.length > 0) {
+      payload.attachment = attachments.map(a => ({
+        name: a.name,
+        content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content
+      }));
+    }
+
+    const body = JSON.stringify(payload);
 
     const req = https.request({
       hostname: 'api.brevo.com',
@@ -91,8 +101,9 @@ async function verifyEmailConnection() {
 
 /**
  * Send email notification
+ * attachments (optional): [{ name, content (Buffer or base64), type }]
  */
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, attachments }) {
   if (process.env.EMAIL_ENABLED !== 'true') {
     console.log('Email notifications disabled, skipping email to:', to);
     return { success: false, reason: 'Email disabled' };
@@ -104,7 +115,7 @@ async function sendEmail({ to, subject, html, text }) {
   // Use Brevo HTTP API if key is configured (works even when SMTP ports are blocked)
   if (process.env.BREVO_API_KEY) {
     try {
-      const result = await sendViaBrevoApi({ to, subject, html, text, from, fromName });
+      const result = await sendViaBrevoApi({ to, subject, html, text, from, fromName, attachments });
       console.log('Email sent successfully via Brevo API:', { to, subject });
       return result;
     } catch (error) {
