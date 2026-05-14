@@ -109,14 +109,22 @@ module.exports = (pool) => {
       } catch (_) {}
 
       if (toEmail) {
-        // Read attachment into buffer before temp file is deleted
-        let attachments = [];
+        // Save attachment to permanent folder and include download link in email
+        let attachmentHtml = '';
         if (req.file) {
           try {
-            const fileBuffer = fs.readFileSync(req.file.path);
-            attachments = [{ name: req.file.originalname, content: fileBuffer }];
+            const feedbackDir = path.join('/app/uploads', 'feedback-attachments');
+            if (!fs.existsSync(feedbackDir)) fs.mkdirSync(feedbackDir, { recursive: true });
+            const ext = path.extname(req.file.originalname);
+            const savedName = `${feedbackId}${ext}`;
+            const savedPath = path.join(feedbackDir, savedName);
+            fs.copyFileSync(req.file.path, savedPath);
+            const appUrl = process.env.APP_URL || '';
+            const downloadUrl = `${appUrl}/uploads/feedback-attachments/${savedName}`;
+            attachmentHtml = `<p>📎 <strong>Attachment:</strong> <a href="${downloadUrl}">${req.file.originalname}</a></p>`;
           } catch (fileErr) {
-            console.error('Could not read attachment for email:', fileErr.message);
+            console.error('Could not save feedback attachment:', fileErr.message);
+            attachmentHtml = `<p><em>📎 Attachment: ${req.file.originalname} (could not be saved)</em></p>`;
           }
         }
 
@@ -133,9 +141,8 @@ module.exports = (pool) => {
             <hr>
             <p><strong>Message:</strong></p>
             <p>${message.replace(/\n/g, '<br>')}</p>
-            ${req.file ? `<p><em>📎 Attachment: ${req.file.originalname}</em></p>` : ''}
-          `,
-          attachments
+            ${attachmentHtml}
+          `
         }).catch(emailError => console.error('Error sending feedback email:', emailError));
       }
 
