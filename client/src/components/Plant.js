@@ -13,8 +13,8 @@ import './Plant.css';
 const getCorrectCabinet = (trackerId) => {
   if (!trackerId.startsWith('M')) return '';
   const num = parseInt(trackerId.substring(1), 10);
-  if (isNaN(num) || num < 1 || num > 99) return '';
-  if (num >= 93) return 'CT24'; // M93-M99 all belong to CT24
+  if (isNaN(num) || num < 1 || num > 999) return '';
+  if (num >= 93) return 'CT24'; // M93+ all belong to CT24
   return `CT${Math.ceil(num / 4).toString().padStart(2, '0')}`;
 };
 
@@ -255,7 +255,7 @@ function Plant() {
       if (structure && structure.length > 0) {
         // Filter: keep only M## trackers and SITE_OFFICE, remove roads
         const filtered = structure.filter(t => 
-          (t.id && t.id.startsWith('M') && /^M\d{2}$/.test(t.id)) || t.id.startsWith('SITE_OFFICE')
+          (t.id && t.id.startsWith('M') && /^M\d{1,3}$/.test(t.id)) || t.id.startsWith('SITE_OFFICE')
         );
         
         // Fix CT numbers
