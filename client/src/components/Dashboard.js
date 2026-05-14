@@ -407,7 +407,11 @@ function Dashboard() {
       } else if (pmPeriod === 'monthly') {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      } else { // yearly
+      } else if (pmPeriod === 'quarterly') {
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        endDate = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+      } else { // annual
         startDate = new Date(now.getFullYear(), 0, 1);
         endDate = new Date(now.getFullYear(), 11, 31);
       }
@@ -933,7 +937,8 @@ function Dashboard() {
               >
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
               </select>
             </div>
             <div className="pm-chart-container">
