@@ -6,6 +6,7 @@ const { parsePlantMap } = require('../utils/plantMapParser');
 const { requireAuth, requireAdmin, isAdmin, isSuperAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { requireFeature } = require('../middleware/requireFeature');
 const { createNotification } = require('../utils/notifications');
+const { sendEmail } = require('../utils/email');
 const { getCompanySubDir, getOrganizationSlugFromRequest, getOrganizationIdFromRequest } = require('../utils/organizationStorage');
 const { getDb } = require('../middleware/tenantContext');
 
@@ -451,7 +452,7 @@ module.exports = (pool) => {
       let adminsResult = { rows: [] };
       if (requestOrgId) {
         adminsResult = await db.query(
-          `SELECT DISTINCT id, full_name, username FROM users 
+          `SELECT DISTINCT id, full_name, username, email FROM users
            WHERE is_active = true
              AND organization_id = $1
              AND (
@@ -499,6 +500,46 @@ module.exports = (pool) => {
           });
           
           console.log(`[PLANT] ✅ Notification created for admin ${admin.id} (${admin.username}) for request ${request.id}`);
+
+          // Send email to admin (non-blocking)
+          if (admin.email) {
+            const trackerList = tracker_ids.join(', ');
+            const requesterName = user.full_name || user.username;
+            const appUrl = process.env.APP_URL || '';
+            sendEmail({
+              to: admin.email,
+              subject: `Tracker Status Request – ${taskText}`,
+              html: `
+                <!DOCTYPE html><html><head><meta charset="utf-8">
+                <style>
+                  body { font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+                  .header { background-color: #007bff; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+                  .content { background-color: #f8f9fa; padding: 20px; border-radius: 0 0 5px 5px; }
+                  .details { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #007bff; border-radius: 4px; }
+                  .detail-row { margin: 8px 0; }
+                  .label { font-weight: bold; color: #555; }
+                  .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; margin-top: 15px; }
+                  .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #666; text-align: center; }
+                </style></head><body>
+                <div class="header"><h1>Tracker Status Request</h1></div>
+                <div class="content">
+                  <p>Hello ${admin.full_name || admin.username},</p>
+                  <p><strong>${requesterName}</strong> has submitted a tracker status request requiring your approval.</p>
+                  <div class="details">
+                    <div class="detail-row"><span class="label">Task Type:</span> ${taskText}</div>
+                    <div class="detail-row"><span class="label">Status:</span> ${statusText}</div>
+                    <div class="detail-row"><span class="label">Trackers (${tracker_ids.length}):</span> ${trackerList}</div>
+                    <div class="detail-row"><span class="label">Requested by:</span> ${requesterName}</div>
+                    ${message ? `<div class="detail-row"><span class="label">Message:</span> ${message}</div>` : ''}
+                  </div>
+                  <p>Please log in to review and approve or reject this request.</p>
+                  ${appUrl ? `<a href="${appUrl}/plant" class="button">Review Request</a>` : ''}
+                  <div class="footer"><p>This is an automated notification from SPHAiRDigital. Do not reply to this email.</p></div>
+                </div>
+                </body></html>
+              `
+            }).catch(err => console.error(`[PLANT] Email to admin ${admin.email} failed:`, err.message));
+          }
         } catch (notifError) {
           // Check if error is due to unique constraint violation (duplicate prevented by database/idempotency_key)
           if (notifError.code === '23505') {
