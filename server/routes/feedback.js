@@ -57,16 +57,24 @@ module.exports = (pool) => {
       const userId = req.session.userId;
       const db = getDb(req, pool);
 
-      // Look up user info from DB (name + registered email)
+      // Look up user info + company from DB
       let userName = 'User';
       let userEmail = req.body.email || '';
+      let companyName = null;
       if (userId) {
         try {
-          const userResult = await db.query('SELECT full_name, username, email FROM users WHERE id = $1', [userId]);
+          const userResult = await db.query(
+            `SELECT u.full_name, u.username, u.email, o.name as org_name
+             FROM users u
+             LEFT JOIN organizations o ON u.organization_id = o.id
+             WHERE u.id = $1`,
+            [userId]
+          );
           if (userResult.rows.length > 0) {
             const u = userResult.rows[0];
             userName = u.full_name || u.username || 'User';
             userEmail = u.email || u.username || userEmail;
+            companyName = u.org_name || null;
           }
         } catch (err) {
           console.error('Error fetching user info:', err);
@@ -107,6 +115,7 @@ module.exports = (pool) => {
           html: `
             <h2>New Support Message</h2>
             <p><strong>From:</strong> ${userName} (${userEmail})</p>
+            ${companyName ? `<p><strong>Company:</strong> ${companyName}</p>` : ''}
             <p><strong>Subject:</strong> ${subjectLabels[subject] || subject}</p>
             <p><strong>Page:</strong> ${page_url || 'Unknown'}</p>
             <p><strong>Feedback ID:</strong> ${feedbackId}</p>
