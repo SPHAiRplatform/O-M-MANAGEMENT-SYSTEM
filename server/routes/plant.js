@@ -611,7 +611,8 @@ module.exports = (pool) => {
 
       const user = userResult.rows[0];
       const userRoles = user.roles ? (typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles) : [user.role];
-      const isAdminUser = userRoles.some(r => r === 'admin' || r === 'super_admin') || user.role === 'admin' || user.role === 'super_admin';
+      const isAdminUser = userRoles.some(r => ['admin', 'super_admin', 'operations_admin', 'system_owner'].includes(r))
+        || ['admin', 'super_admin', 'operations_admin', 'system_owner'].includes(user.role);
 
       if (!isAdminUser) {
         return res.status(403).json({ error: 'Only admins can view tracker status requests' });
@@ -676,7 +677,8 @@ module.exports = (pool) => {
 
       const user = userResult.rows[0];
       const userRoles = user.roles ? (typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles) : [user.role];
-      const isAdminUser = userRoles.some(r => r === 'admin' || r === 'super_admin') || user.role === 'admin' || user.role === 'super_admin';
+      const isAdminUser = userRoles.some(r => ['admin', 'super_admin', 'operations_admin', 'system_owner'].includes(r))
+        || ['admin', 'super_admin', 'operations_admin', 'system_owner'].includes(user.role);
 
       if (!isAdminUser) {
         return res.status(403).json({ error: 'Only admins can review tracker status requests' });
