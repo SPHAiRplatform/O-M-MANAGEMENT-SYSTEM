@@ -269,24 +269,21 @@ async function notifyTaskAssigned(pool, task, assignedUser) {
   ];
   const message = messageLines.join('\n');
 
-  // PRIMARY: Send email notification first
-  try {
-    const emailResult = await sendTaskAssignmentEmail(assignedUser, {
-      ...task,
-      asset_name: taskDetails.asset_name,
-      task_display_name: taskDisplayName,
-      creator_display_name: creatorLabel
-    });
-    
+  // PRIMARY: Send email notification (non-blocking — does not delay task creation response)
+  sendTaskAssignmentEmail(assignedUser, {
+    ...task,
+    asset_name: taskDetails.asset_name,
+    task_display_name: taskDisplayName,
+    creator_display_name: creatorLabel
+  }).then(emailResult => {
     if (emailResult.success) {
       console.log(`Email notification sent successfully to ${assignedUser.email} for task ${task.task_code}`);
     } else {
       console.warn(`Email notification failed for ${assignedUser.email}: ${emailResult.reason || emailResult.error}`);
     }
-  } catch (emailError) {
+  }).catch(emailError => {
     console.error('Error sending task assignment email:', emailError);
-    // Continue with in-app notification even if email fails
-  }
+  });
   
   // SECONDARY: Create in-app notification
   return await createNotification(pool, {
@@ -317,23 +314,20 @@ async function notifyTaskReminder(pool, task, assignedUser) {
 
   const taskDisplayName = await getTaskDisplayName(pool, task);
   
-  // PRIMARY: Send email notification first
-  try {
-    const emailResult = await sendTaskReminderEmail(assignedUser, {
-      ...task,
-      asset_name: taskDetails.asset_name,
-      task_display_name: taskDisplayName
-    });
-    
+  // PRIMARY: Send email notification (non-blocking)
+  sendTaskReminderEmail(assignedUser, {
+    ...task,
+    asset_name: taskDetails.asset_name,
+    task_display_name: taskDisplayName
+  }).then(emailResult => {
     if (emailResult.success) {
       console.log(`Reminder email sent successfully to ${assignedUser.email} for task ${task.task_code}`);
     } else {
       console.warn(`Reminder email failed for ${assignedUser.email}: ${emailResult.reason || emailResult.error}`);
     }
-  } catch (emailError) {
+  }).catch(emailError => {
     console.error('Error sending task reminder email:', emailError);
-    // Continue with in-app notification even if email fails
-  }
+  });
   
   // SECONDARY: Create in-app notification
   return await createNotification(pool, {
