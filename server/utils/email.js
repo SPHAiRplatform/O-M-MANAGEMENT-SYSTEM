@@ -28,7 +28,7 @@ function sendViaBrevoApi({ to, subject, html, text, from, fromName, attachments 
       }));
     }
 
-    const body = JSON.stringify(payload);
+    const bodyBuffer = Buffer.from(JSON.stringify(payload), 'utf8');
 
     const req = https.request({
       hostname: 'api.brevo.com',
@@ -37,23 +37,26 @@ function sendViaBrevoApi({ to, subject, html, text, from, fromName, attachments 
       headers: {
         'api-key': process.env.BREVO_API_KEY,
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
+        'Content-Length': bodyBuffer.length
       }
     }, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve({ success: true, messageId: JSON.parse(data).messageId });
+          const parsed = JSON.parse(data);
+          console.log('Brevo API response:', res.statusCode, JSON.stringify(parsed));
+          resolve({ success: true, messageId: parsed.messageId });
         } else {
+          console.error('Brevo API error response:', res.statusCode, data);
           reject(new Error(`Brevo API error ${res.statusCode}: ${data}`));
         }
       });
     });
 
     req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(new Error('Brevo API request timeout')); });
-    req.write(body);
+    req.setTimeout(15000, () => { req.destroy(new Error('Brevo API request timeout')); });
+    req.write(bodyBuffer);
     req.end();
   });
 }
