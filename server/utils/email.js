@@ -1,27 +1,62 @@
 /**
  * Email Utility
- * Handles sending emails for notifications
+ * Uses Brevo HTTP API (port 443) when BREVO_API_KEY is set,
+ * falls back to nodemailer SMTP otherwise.
  */
 
+const https = require('https');
 const nodemailer = require('nodemailer');
 
-// Create reusable transporter object using SMTP transport
 let transporter = null;
 
-/**
- * Initialize email transporter
- */
+// --- Brevo HTTP API sender ---
+function sendViaBrevoApi({ to, subject, html, text, from, fromName }) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      sender: { name: fromName, email: from },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text || html.replace(/<[^>]*>/g, '')
+    });
+
+    const req = https.request({
+      hostname: 'api.brevo.com',
+      path: '/v3/smtp/email',
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve({ success: true, messageId: JSON.parse(data).messageId });
+        } else {
+          reject(new Error(`Brevo API error ${res.statusCode}: ${data}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(new Error('Brevo API request timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+// --- SMTP transporter (fallback) ---
 function initializeEmailTransporter() {
-  // Only initialize if email is enabled
   if (process.env.EMAIL_ENABLED !== 'true') {
     console.log('Email notifications are disabled (EMAIL_ENABLED != true)');
     return null;
   }
 
-  // Check for required email configuration
   if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn('Email configuration incomplete. Email notifications will be disabled.');
-    console.warn('Required: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS');
     return null;
   }
 
@@ -29,18 +64,11 @@ function initializeEmailTransporter() {
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT, 10),
-      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      },
-      // For Gmail and other services that require OAuth2
-      ...(process.env.SMTP_SERVICE && {
-        service: process.env.SMTP_SERVICE // e.g., 'gmail', 'outlook'
-      })
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      ...(process.env.SMTP_SERVICE && { service: process.env.SMTP_SERVICE })
     });
-
-    console.log('Email transporter initialized successfully');
+    console.log('Email transporter initialized successfully (SMTP)');
     return transporter;
   } catch (error) {
     console.error('Error initializing email transporter:', error);
@@ -48,21 +76,12 @@ function initializeEmailTransporter() {
   }
 }
 
-/**
- * Verify email transporter connection
- */
 async function verifyEmailConnection() {
-  if (!transporter) {
-    transporter = initializeEmailTransporter();
-  }
-
-  if (!transporter) {
-    return false;
-  }
-
+  if (process.env.BREVO_API_KEY) return true;
+  if (!transporter) transporter = initializeEmailTransporter();
+  if (!transporter) return false;
   try {
     await transporter.verify();
-    console.log('Email server connection verified');
     return true;
   } catch (error) {
     console.error('Email server connection failed:', error);
@@ -72,49 +91,42 @@ async function verifyEmailConnection() {
 
 /**
  * Send email notification
- * @param {Object} options - Email options
- * @param {string} options.to - Recipient email address
- * @param {string} options.subject - Email subject
- * @param {string} options.html - HTML email body
- * @param {string} options.text - Plain text email body (optional)
  */
 async function sendEmail({ to, subject, html, text }) {
-  // Check if email is enabled
   if (process.env.EMAIL_ENABLED !== 'true') {
     console.log('Email notifications disabled, skipping email to:', to);
     return { success: false, reason: 'Email disabled' };
   }
 
-  // Initialize transporter if not already done
-  if (!transporter) {
-    transporter = initializeEmailTransporter();
+  const from = process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME || 'SPHAiRDigital';
+
+  // Use Brevo HTTP API if key is configured (works even when SMTP ports are blocked)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const result = await sendViaBrevoApi({ to, subject, html, text, from, fromName });
+      console.log('Email sent successfully via Brevo API:', { to, subject });
+      return result;
+    } catch (error) {
+      console.error('Error sending email via Brevo API:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
+  // Fallback: SMTP
+  if (!transporter) transporter = initializeEmailTransporter();
   if (!transporter) {
     console.warn('Email transporter not available, skipping email to:', to);
     return { success: false, reason: 'Transporter not available' };
   }
 
-  // Get sender information
-  const from = process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@example.com';
-  const fromName = process.env.EMAIL_FROM_NAME || 'SPHAiRDigital';
-
   try {
-    const mailOptions = {
+    const info = await transporter.sendMail({
       from: `"${fromName}" <${from}>`,
-      to: to,
-      subject: subject,
-      html: html,
-      text: text || html.replace(/<[^>]*>/g, '') // Strip HTML tags for text version
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', {
-      to: to,
-      subject: subject,
-      messageId: info.messageId
+      to, subject, html,
+      text: text || html.replace(/<[^>]*>/g, '')
     });
-
+    console.log('Email sent successfully via SMTP:', { to, subject, messageId: info.messageId });
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Error sending email:', error);
@@ -410,9 +422,13 @@ async function sendTaskReminderEmail(user, task) {
   });
 }
 
-// Initialize transporter on module load
+// Initialize on module load (skip SMTP init if using Brevo API)
 if (process.env.EMAIL_ENABLED === 'true') {
-  initializeEmailTransporter();
+  if (process.env.BREVO_API_KEY) {
+    console.log('Email transporter initialized successfully (Brevo HTTP API)');
+  } else {
+    initializeEmailTransporter();
+  }
 }
 
 module.exports = {
