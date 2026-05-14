@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const { body, validationResult } = require('express-validator');
 const { requireAuth } = require('../middleware/auth');
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../utils/email');
 const { getDb } = require('../middleware/tenantContext');
 
 // Multer config for feedback attachments (temp directory, 5MB limit)
@@ -83,71 +83,39 @@ module.exports = (pool) => {
 
       const feedbackId = result.rows[0].id;
 
-      // Send email notification (if email is configured)
+      // Send email notification (non-blocking)
+      const subjectLabels = {
+        question: 'Question',
+        bug: 'Bug Report',
+        feature: 'Feature Request',
+        improvement: 'Improvement Suggestion',
+        other: 'Other'
+      };
+
+      let toEmail = process.env.FEEDBACK_EMAIL || process.env.EMAIL_FROM || process.env.SMTP_USER || '';
       try {
-        if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-          let toEmail = process.env.SMTP_USER;
-          try {
-            const settingsRow = await db.query(
-              `SELECT setting_value FROM platform_settings WHERE setting_key = 'feedback_contact_email' AND setting_value IS NOT NULL AND setting_value != '' LIMIT 1`
-            );
-            if (settingsRow.rows[0]?.setting_value) {
-              toEmail = settingsRow.rows[0].setting_value.trim();
-            } else if (process.env.FEEDBACK_EMAIL) {
-              toEmail = process.env.FEEDBACK_EMAIL;
-            }
-          } catch (_) {
-            if (process.env.FEEDBACK_EMAIL) toEmail = process.env.FEEDBACK_EMAIL;
-          }
+        const settingsRow = await db.query(
+          `SELECT setting_value FROM platform_settings WHERE setting_key = 'feedback_contact_email' AND setting_value IS NOT NULL AND setting_value != '' LIMIT 1`
+        );
+        if (settingsRow.rows[0]?.setting_value) toEmail = settingsRow.rows[0].setting_value.trim();
+      } catch (_) {}
 
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_SECURE === 'true',
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASSWORD,
-            },
-          });
-
-          const subjectLabels = {
-            question: 'Question',
-            bug: 'Bug Report',
-            feature: 'Feature Request',
-            improvement: 'Improvement Suggestion',
-            other: 'Other'
-          };
-
-          const mailOptions = {
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            replyTo: userEmail || undefined,
-            to: toEmail,
-            subject: `[SPHAiRDigital Feedback] ${subjectLabels[subject] || subject} - ${userName}`,
-            html: `
-              <h2>New Feedback Submission</h2>
-              <p><strong>From:</strong> ${userName} (${userEmail})</p>
-              <p><strong>Subject:</strong> ${subjectLabels[subject] || subject}</p>
-              <p><strong>Page:</strong> ${page_url || 'Unknown'}</p>
-              <p><strong>Feedback ID:</strong> ${feedbackId}</p>
-              <hr>
-              <p><strong>Message:</strong></p>
-              <p>${message.replace(/\n/g, '<br>')}</p>
-              ${req.file ? '<p><em>📎 See attached file.</em></p>' : ''}
-            `,
-          };
-
-          if (req.file) {
-            mailOptions.attachments = [{
-              filename: req.file.originalname,
-              path: req.file.path
-            }];
-          }
-
-          await transporter.sendMail(mailOptions);
-        }
-      } catch (emailError) {
-        // Log but don't fail the request if email fails
-        console.error('Error sending feedback email:', emailError);
+      if (toEmail) {
+        sendEmail({
+          to: toEmail,
+          subject: `[SPHAiRDigital Support] ${subjectLabels[subject] || subject} - ${userName}`,
+          html: `
+            <h2>New Support Message</h2>
+            <p><strong>From:</strong> ${userName} (${userEmail})</p>
+            <p><strong>Subject:</strong> ${subjectLabels[subject] || subject}</p>
+            <p><strong>Page:</strong> ${page_url || 'Unknown'}</p>
+            <p><strong>Feedback ID:</strong> ${feedbackId}</p>
+            <hr>
+            <p><strong>Message:</strong></p>
+            <p>${message.replace(/\n/g, '<br>')}</p>
+            ${req.file ? '<p><em>See attached file.</em></p>' : ''}
+          `
+        }).catch(emailError => console.error('Error sending feedback email:', emailError));
       }
 
       res.json({

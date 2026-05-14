@@ -97,7 +97,7 @@ function FeedbackModal({ isOpen, onClose }) {
     <div className="feedback-modal-overlay" onClick={onClose}>
       <div className="feedback-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="feedback-modal-header">
-          <h2>Contact Developer</h2>
+          <h2>Contact Support Team</h2>
           <button className="feedback-modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
@@ -119,15 +119,17 @@ function FeedbackModal({ isOpen, onClose }) {
               </div>
             )}
 
-            <div className="feedback-form-group">
-              <label>To</label>
-              <input
-                type="email"
-                value={contactEmail || '(not configured)'}
-                readOnly
-                disabled
-              />
-            </div>
+            {(user?.roles?.includes('system_owner') || user?.roles?.includes('super_admin') || user?.role === 'system_owner' || user?.role === 'super_admin') && (
+              <div className="feedback-form-group">
+                <label>To</label>
+                <input
+                  type="email"
+                  value={contactEmail || '(not configured)'}
+                  readOnly
+                  disabled
+                />
+              </div>
+            )}
 
             <div className="feedback-form-group">
               <label htmlFor="subject">Subject *</label>
