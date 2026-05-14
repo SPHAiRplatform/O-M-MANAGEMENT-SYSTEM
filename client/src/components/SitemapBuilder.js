@@ -6,7 +6,7 @@ import './SitemapBuilder.css';
 const getCorrectCabinet = (trackerId) => {
   if (!trackerId.startsWith('M')) return '';
   const num = parseInt(trackerId.substring(1), 10);
-  if (isNaN(num) || num < 1 || num > 99) return '';
+  if (isNaN(num) || num < 1 || num > 999) return '';
   if (num >= 93) return 'CT24';
   return `CT${Math.ceil(num / 4).toString().padStart(2, '0')}`;
 };
@@ -165,8 +165,8 @@ function SitemapBuilder({ initialTrackers, initialLabels, onSave, onExit }) {
       .filter(id => /^M\d+$/.test(id))
       .map(id => parseInt(id.substring(1), 10));
     let nextNum = 1;
-    while (existingNums.includes(nextNum) && nextNum <= 99) nextNum++;
-    if (nextNum > 99) return null;
+    while (existingNums.includes(nextNum) && nextNum <= 999) nextNum++;
+    if (nextNum > 999) return null;
     return `M${String(nextNum).padStart(2, '0')}`;
   }, []);
 
@@ -629,7 +629,7 @@ function SitemapBuilder({ initialTrackers, initialLabels, onSave, onExit }) {
 
       {/* Toolbar */}
       <div className="builder-toolbar">
-        <button className="btn btn-sm btn-primary" onClick={addBlock} disabled={trackerCount >= 99} title="Add a new tracker block">
+        <button className="btn btn-sm btn-primary" onClick={addBlock} disabled={trackerCount >= 999} title="Add a new tracker block">
           + Tracker
         </button>
         <button className="btn btn-sm btn-secondary" onClick={addSiteOffice} title="Add a site office block">
