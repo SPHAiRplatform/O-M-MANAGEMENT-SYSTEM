@@ -206,22 +206,39 @@
    */
   let scrollspyEnabled = true;
 
-  // On load, scroll to the section matching the current path and set active nav
-  window.addEventListener('load', function() {
+  // Scroll to section matching current path and set active nav
+  (function initSectionScroll() {
     const path = window.location.pathname.replace(/\/$/, '') || '/home';
     const sectionId = sectionMap[path];
-    if (sectionId && sectionId !== 'hero') {
-      history.replaceState(null, '', path);
-      scrollspyEnabled = false;
+    if (!sectionId || sectionId === 'hero') return;
+
+    history.replaceState(null, '', path);
+    scrollspyEnabled = false;
+
+    function setActiveNav() {
       document.querySelectorAll('.navmenu a').forEach(link => {
         link.classList.remove('active');
         if (link.getAttribute('href') === path) link.classList.add('active');
       });
-      setTimeout(() => scrollToSection(sectionId), 200);
-      setTimeout(() => scrollToSection(sectionId), 800);
-      setTimeout(() => { scrollToSection(sectionId); scrollspyEnabled = true; }, 1800);
     }
-  });
+
+    function doScroll() {
+      setActiveNav();
+      scrollToSection(sectionId);
+    }
+
+    if (document.readyState === 'complete') {
+      doScroll();
+      setTimeout(doScroll, 600);
+      setTimeout(() => { doScroll(); scrollspyEnabled = true; }, 1500);
+    } else {
+      window.addEventListener('load', function() {
+        doScroll();
+        setTimeout(doScroll, 600);
+        setTimeout(() => { doScroll(); scrollspyEnabled = true; }, 1500);
+      });
+    }
+  })();
 
   function navmenuScrollspy() {
     if (!scrollspyEnabled) return;
