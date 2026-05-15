@@ -8,8 +8,7 @@ async function logAudit(pool, req, { action, entityType, entityId, details }) {
     const hasReq = req && typeof req === 'object';
     const session = hasReq && req.session ? req.session : null;
 
-    // Skip audit logging for system_owner actions entirely
-    if (session?.role === 'system_owner') return;
+    // system_owner actions are audited like any other role
 
     const tenantContext = hasReq && req.tenantContext ? req.tenantContext : null;
     const orgId = tenantContext?.organizationId ?? session?.selectedOrganizationId ?? session?.organizationId ?? null;
@@ -44,6 +43,8 @@ const AUDIT_ACTIONS = {
   TASK_BULK_DELETED: 'task_bulk_deleted',
   ORG_ENTERED: 'org_entered',
   ORG_EXITED: 'org_exited',
+  PASSWORD_CHANGED: 'password_changed',
+  PASSWORD_RESET: 'password_reset',
 };
 
 const AUDIT_ENTITY_TYPES = {

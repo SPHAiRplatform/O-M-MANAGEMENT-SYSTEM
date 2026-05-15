@@ -226,8 +226,8 @@ module.exports = (pool) => {
       if (firstUser && (!firstUser.username || !firstUser.email || !firstUser.full_name)) {
         return res.status(400).json({ error: 'First user requires username, email, and full_name' });
       }
-      if (firstUser && firstUser.password && firstUser.password.length < 6) {
-        return res.status(400).json({ error: 'First user password must be at least 6 characters' });
+      if (firstUser && firstUser.password && firstUser.password.length < 8) {
+        return res.status(400).json({ error: 'First user password must be at least 8 characters' });
       }
 
       const db = getDb(req, pool);

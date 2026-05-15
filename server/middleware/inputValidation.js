@@ -100,7 +100,7 @@ const validateUsername = () => {
 /**
  * Validate password strength
  */
-const validatePassword = (fieldName = 'password', minLength = 6) => {
+const validatePassword = (fieldName = 'password', minLength = 8) => {
   return body(fieldName)
     .isLength({ min: minLength, max: 128 })
     .withMessage(`Password must be between ${minLength} and 128 characters`)
@@ -265,8 +265,8 @@ const validateCreateUser = [
     }),
   body('password')
     .optional()
-    .isLength({ min: 6, max: 128 })
-    .withMessage('Password must be between 6 and 128 characters'),
+    .isLength({ min: 8, max: 128 })
+    .withMessage('Password must be between 8 and 128 characters'),
   // organization_id is optional in validation (handled in route logic)
   // System owners can provide it, regular admins get it automatically
   validateUUID('organization_id', 'body').optional(),
@@ -307,8 +307,8 @@ const validateUpdateUser = [
     }),
   body('password')
     .optional()
-    .isLength({ min: 6, max: 128 })
-    .withMessage('Password must be between 6 and 128 characters'),
+    .isLength({ min: 8, max: 128 })
+    .withMessage('Password must be between 8 and 128 characters'),
   body('is_active').optional().isBoolean().withMessage('is_active must be a boolean'),
   // organization_id is optional in validation (handled in route logic)
   validateUUID('organization_id', 'body').optional(),
@@ -422,7 +422,7 @@ const validateChangePassword = [
     .withMessage('Current password is required')
     .isLength({ min: 1, max: 128 })
     .withMessage('Current password must be between 1 and 128 characters'),
-  validatePassword('newPassword', 6),
+  validatePassword('newPassword', 8),
   handleValidationErrors
 ];
 

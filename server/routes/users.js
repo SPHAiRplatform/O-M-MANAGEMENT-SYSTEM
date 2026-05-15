@@ -495,8 +495,8 @@ module.exports = (pool) => {
       }
       const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'ChangeMe1!';
       
-      if (!useDefaultPassword && password.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      if (!useDefaultPassword && password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters long' });
       }
 
       // Validate roles - support both legacy and RBAC roles
@@ -739,8 +739,8 @@ module.exports = (pool) => {
         values.push(is_active);
       }
       if (password !== undefined) {
-        if (password.length < 6) {
-          return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        if (password.length < 8) {
+          return res.status(400).json({ error: 'Password must be at least 8 characters long' });
         }
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
@@ -978,8 +978,8 @@ module.exports = (pool) => {
         }
 
         // Validate new password
-        if (password.length < 6) {
-          return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+        if (password.length < 8) {
+          return res.status(400).json({ error: 'New password must be at least 8 characters long' });
         }
       }
 

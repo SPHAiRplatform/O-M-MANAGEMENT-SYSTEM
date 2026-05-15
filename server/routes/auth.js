@@ -669,8 +669,8 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Email, code, and new password are required' });
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
 
       const trimmedEmail = email.trim().toLowerCase();
@@ -705,6 +705,8 @@ module.exports = (pool) => {
         [newHash, user.id]
       );
 
+      logAudit(pool, { ip: req.ip }, { action: AUDIT_ACTIONS.PASSWORD_RESET, entityType: AUDIT_ENTITY_TYPES.AUTH, entityId: user.id, details: { email: trimmedEmail, ip: req.ip } }).catch(() => {});
+
       res.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
     } catch (error) {
       logger.error('Reset password error', { error: error.message });
@@ -733,9 +735,9 @@ module.exports = (pool) => {
         return;
       }
 
-      if (newPassword.length < 6) {
+      if (newPassword.length < 8) {
         if (!res.headersSent) {
-          return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+          return res.status(400).json({ error: 'New password must be at least 8 characters long' });
         }
         return;
       }
@@ -785,8 +787,10 @@ module.exports = (pool) => {
         req.session.passwordChanged = true;
       }
 
+      logAudit(pool, req, { action: AUDIT_ACTIONS.PASSWORD_CHANGED, entityType: AUDIT_ENTITY_TYPES.AUTH, entityId: req.session.userId, details: { ip: req.ip } }).catch(() => {});
+
       if (!res.headersSent) {
-        res.json({ 
+        res.json({
           message: 'Password changed successfully',
           password_changed: true
         });
