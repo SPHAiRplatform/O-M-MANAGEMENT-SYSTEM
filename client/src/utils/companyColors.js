@@ -6,8 +6,17 @@
 import { getCurrentOrganizationBranding } from '../api/api';
 
 // Default colors (fallback)
-const DEFAULT_PRIMARY = '#1A73E8';
+const DEFAULT_PRIMARY = '#0f3460';
 const DEFAULT_SECONDARY = '#7b809a';
+
+// Darken a hex color by a given ratio (0–1)
+function darkenHex(hex, ratio) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, Math.round(((n >> 16) & 0xff) * (1 - ratio)));
+  const g = Math.max(0, Math.round(((n >> 8) & 0xff) * (1 - ratio)));
+  const b = Math.max(0, Math.round((n & 0xff) * (1 - ratio)));
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
 
 /**
  * Apply company colors to CSS variables
@@ -16,22 +25,15 @@ const DEFAULT_SECONDARY = '#7b809a';
  */
 export function applyCompanyColors(primaryColor, secondaryColor) {
   const root = document.documentElement;
-  
-  if (primaryColor) {
-    root.style.setProperty('--md-primary', primaryColor);
-    root.style.setProperty('--md-primary-focus', primaryColor);
-    root.style.setProperty('--md-info', primaryColor);
-  } else {
-    root.style.setProperty('--md-primary', DEFAULT_PRIMARY);
-    root.style.setProperty('--md-primary-focus', DEFAULT_PRIMARY);
-    root.style.setProperty('--md-info', DEFAULT_PRIMARY);
-  }
-  
-  if (secondaryColor) {
-    root.style.setProperty('--md-secondary', secondaryColor);
-  } else {
-    root.style.setProperty('--md-secondary', DEFAULT_SECONDARY);
-  }
+  const primary = primaryColor || DEFAULT_PRIMARY;
+
+  root.style.setProperty('--md-primary', primary);
+  root.style.setProperty('--md-primary-focus', darkenHex(primary, 0.1));
+  root.style.setProperty('--md-primary-dark', darkenHex(primary, 0.2));
+  root.style.setProperty('--md-primary-darker', darkenHex(primary, 0.35));
+  root.style.setProperty('--md-primary-header-start', darkenHex(primary, 0.45));
+  root.style.setProperty('--md-info', primary);
+  root.style.setProperty('--md-secondary', secondaryColor || DEFAULT_SECONDARY);
 }
 
 /**

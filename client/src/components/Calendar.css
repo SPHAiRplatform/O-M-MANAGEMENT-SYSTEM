@@ -87,7 +87,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+  background: linear-gradient(135deg, var(--md-primary-header-start) 0%, var(--md-primary) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
