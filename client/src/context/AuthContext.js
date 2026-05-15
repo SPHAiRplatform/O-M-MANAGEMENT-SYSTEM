@@ -22,13 +22,13 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('auth:session_displaced', handleDisplaced);
   }, []);
 
-  // Poll /auth/me every 30 seconds as a heartbeat — displacement is handled
-  // immediately by the global api.js interceptor via the auth:session_displaced event
+  // Poll /auth/me every 5 seconds to detect session displacement quickly.
+  // If Device B logs in, Device A gets kicked within 5 seconds.
   useEffect(() => {
     if (user) {
       pollRef.current = setInterval(() => {
         getCurrentUser().catch(() => {});
-      }, 30000);
+      }, 5000);
     } else {
       clearInterval(pollRef.current);
     }
