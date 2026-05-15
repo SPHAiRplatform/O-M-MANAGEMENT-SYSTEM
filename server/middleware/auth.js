@@ -63,19 +63,16 @@ async function requireAuth(req, res, next) {
       // Verify JWT token
       const decoded = verifyToken(token);
       
-      // Check Redis for single-device enforcement (if available)
-      // A valid JWT is sufficient for auth — Redis is optional for enrichment/revocation
+      // Single-device enforcement: check that this token is still the active one for this user
       if (isRedisAvailable() && !isDevelopment()) {
-        // Single-Device-Per-Session: only reject if another device explicitly logged in
-        // TEMPORARILY DISABLED - causes issues with multiple tabs/restarts
-       // const { getUserSession } = require('../utils/redis');
-       // const existingSession = await getUserSession(decoded.userId);
-        //if (existingSession && existingSession !== token) {
-          //return res.status(401).json({
-            //error: 'Session expired',
-            //message: 'You have logged in from another device. Please log in again.'
-          //});
-        //}
+        const { getUserSession } = require('../utils/redis');
+        const activeToken = await getUserSession(decoded.userId);
+        if (activeToken && activeToken !== token) {
+          return res.status(401).json({
+            error: 'session_displaced',
+            message: 'Your session was ended because you signed in on another device.'
+          });
+        }
       }
 
       // JWT is valid — populate session from decoded token

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useRef, useContext } from 'react';
 import { getCurrentUser, login as apiLogin, logout as apiLogout, setAuthToken } from '../api/api';
 import { getErrorMessage } from '../utils/errorHandler';
 
@@ -7,17 +7,41 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [displacedSession, setDisplacedSession] = useState(false);
+  const pollRef = useRef(null);
 
   useEffect(() => {
-    // Check if user is already logged in
     checkAuth();
   }, []);
+
+  // Poll /auth/me every 30 seconds while logged in to detect session displacement
+  useEffect(() => {
+    if (user) {
+      pollRef.current = setInterval(async () => {
+        try {
+          await getCurrentUser();
+        } catch (error) {
+          if (error.response?.data?.error === 'session_displaced') {
+            setAuthToken(null);
+            setUser(null);
+            setDisplacedSession(true);
+          }
+        }
+      }, 30000);
+    } else {
+      clearInterval(pollRef.current);
+    }
+    return () => clearInterval(pollRef.current);
+  }, [user]);
 
   const checkAuth = async () => {
     try {
       const response = await getCurrentUser();
       setUser(response.data.user);
     } catch (error) {
+      if (error.response?.data?.error === 'session_displaced') {
+        setDisplacedSession(true);
+      }
       setUser(null);
     } finally {
       setLoading(false);
@@ -84,8 +108,11 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setAuthToken(null);
       setUser(null);
+      setDisplacedSession(false);
     }
   };
+
+  const clearDisplacedSession = () => setDisplacedSession(false);
 
   // Support both single role (backward compatibility) and multiple roles
   const getUserRoles = () => {
@@ -147,6 +174,8 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       user,
       loading,
+      displacedSession,
+      clearDisplacedSession,
       login,
       logout,
       checkAuth,

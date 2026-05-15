@@ -14,7 +14,7 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, displacedSession, clearDisplacedSession } = useAuth();
   const navigate = useNavigate();
 
   // Forgot-password state: null = login view, 'email' | 'code' | 'newpass'
@@ -378,6 +378,13 @@ function Login() {
           <h1>SPHAiRDigital</h1>
           <p>{resetStep ? resetTitles[resetStep] : 'Sign in to your account'}</p>
         </div>
+
+        {displacedSession && (
+          <div className="alert" style={{ background: '#fff3e0', color: '#e65100', border: '1px solid #ffcc80', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span>You were signed out because your account was used on another device.</span>
+            <button onClick={clearDisplacedSession} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', color: '#e65100', fontSize: '16px', lineHeight: 1 }} aria-label="Dismiss">×</button>
+          </div>
+        )}
 
         {successMsg && (
           <div className="alert" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>
