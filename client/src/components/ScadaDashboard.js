@@ -165,7 +165,7 @@ function ScadaDashboard() {
         <div className="scada-no-data">
           <i className="bi bi-broadcast"></i>
           <h3>No SCADA Data Available</h3>
-          <p>SCADA data will appear here once connections are configured and syncing. Contact your system administrator to set up SCADA integration.</p>
+          <p>SCADA data will appear here once connections are configured and syncing. Contact the support team to set up SCADA integration.</p>
         </div>
       ) : (
         <>

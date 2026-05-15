@@ -125,7 +125,7 @@ function Login() {
           return;
         }
         if (errorContains(result.error || result, 'ACCESS RESTRICTED') && result.admin_email) {
-          setError(`Access restricted\nContact administrator: ${result.admin_email}`);
+          setError(`Access restricted\nContact your administrator: ${result.admin_email}`);
         } else {
           setError(errorMsg);
         }
@@ -458,7 +458,7 @@ function Login() {
               </button>
             </form>
             <div className="login-footer">
-              <p className="text-muted">Need help? Contact your system administrator</p>
+              <p className="text-muted">Need help? Contact your support team</p>
               <p style={{ marginTop: '12px', fontSize: '11px', color: 'var(--md-text-main)', opacity: 0.6 }}>
                 &copy; {new Date().getFullYear()} SPHAiRDigital. All rights reserved.
               </p>

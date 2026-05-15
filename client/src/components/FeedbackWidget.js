@@ -17,8 +17,8 @@ function FeedbackWidget() {
       <button
         className="feedback-widget-button"
         onClick={() => setIsOpen(true)}
-        aria-label="Contact Developer"
-        title="Contact Developer"
+        aria-label="Contact Support Team"
+        title="Contact Support Team"
       >
         <svg
           className="feedback-icon"

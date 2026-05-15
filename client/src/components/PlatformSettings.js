@@ -75,7 +75,7 @@ function PlatformSettings() {
       alert('Settings saved successfully.');
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to save';
-      alert(msg === 'Failed to save' ? 'Could not save Contact Developer email. You may need system owner access.' : msg);
+      alert(msg === 'Failed to save' ? 'Could not save Support Team email. You may need system owner access.' : msg);
     }
   };
 
@@ -235,19 +235,19 @@ function PlatformSettings() {
         )}
       </div>
 
-      {/* Contact Developer - email for feedback messages (system owner) */}
+      {/* Contact Support Team - email for feedback messages (system owner) */}
       <div className="settings-section-card">
         <div className="settings-section-header" onClick={() => toggleSection('contact')}>
           <i className="bi bi-envelope"></i>
-          <span className="section-title">Contact Developer</span>
+          <span className="section-title">Support Team Email</span>
           <i className={`bi ${expandedSections.contact ? 'bi-chevron-up' : 'bi-chevron-down'} chevron`}></i>
         </div>
 
         {expandedSections.contact && (
           <div className="settings-section-body">
             <div className="form-group">
-              <label>Email for Contact Developer messages</label>
-              <p className="settings-field-desc">Messages sent from the &quot;Contact Developer&quot; form will be delivered to this address. Leave blank to use the server default (FEEDBACK_EMAIL or SMTP user).</p>
+              <label>Support Team Email</label>
+              <p className="settings-field-desc">Messages sent via the &quot;Contact Support Team&quot; form will be delivered to this address. Leave blank to use the server default (FEEDBACK_EMAIL or SMTP user).</p>
               {editingContactEmail ? (
                 <>
                   <input
@@ -331,7 +331,7 @@ function PlatformSettings() {
         <button className="btn btn-primary" onClick={handleSave}>
           <i className="bi bi-check-lg"></i> Save Settings
         </button>
-        <p className="settings-note">Organization defaults and security options are stored in your browser. Contact Developer email is saved on the server (system owner only).</p>
+        <p className="settings-note">Organization defaults and security options are stored in your browser. Support Team email is saved on the server (system owner only).</p>
       </div>
     </div>
   );

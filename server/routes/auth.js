@@ -85,7 +85,7 @@ module.exports = (pool) => {
         logAudit(pool, req, { action: AUDIT_ACTIONS.LOGIN_FAILED, entityType: AUDIT_ENTITY_TYPES.AUTH, details: { username, reason: 'account_deactivated', user_id: user.id } }).catch(() => {});
         
         // Get admin email for the error message
-        let adminEmail = 'the administrator';
+        let adminEmail = 'your administrator';
         try {
           // Try to get super_admin first, then admin
           let adminResult;
@@ -135,7 +135,7 @@ module.exports = (pool) => {
         if (!res.headersSent) {
           return res.status(403).json({ 
             error: 'ACCESS RESTRICTED',
-            message: `Your account access has been restricted. Please contact the administrator at ${adminEmail} for assistance.`,
+            message: `Your account access has been restricted. Please contact ${adminEmail} for assistance.`,
             admin_email: adminEmail
           });
         }
@@ -147,7 +147,7 @@ module.exports = (pool) => {
         logger.warn('Login attempt for user with no password set', { username, userId: user.id });
         if (!res.headersSent) {
           return res.status(401).json({ 
-            error: 'Account not set up. Please contact administrator to set your password.' 
+            error: 'Account not set up. Please contact your administrator to set your password.'
           });
         }
         return;
