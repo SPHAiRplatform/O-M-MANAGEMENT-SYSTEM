@@ -103,11 +103,24 @@
 }
 
 .kpi-card:nth-child(5) {
-  border-top-color: #00BCD4;
+  border-top-color: #F44335;
 }
 
 .kpi-card:nth-child(6) {
+  border-top-color: #00BCD4;
+}
+
+.kpi-card:nth-child(7) {
   border-top-color: #FF5722;
+}
+
+.kpi-card:nth-child(8) {
+  border-top-color: #795548;
+}
+
+.kpi-card-danger {
+  border-top-color: #F44335 !important;
+  background: #fff8f8;
 }
 
 .kpi-label {

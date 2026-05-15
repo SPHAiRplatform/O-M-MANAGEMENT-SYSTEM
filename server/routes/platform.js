@@ -701,6 +701,7 @@ module.exports = (pool) => {
 
       const db = getDb(req, pool);
       const timeRange = req.query.range || '30d';
+      const taskType = ['PM', 'CM', 'ALL'].includes(req.query.taskType) ? req.query.taskType : 'ALL';
       
       // Calculate date range
       let startDate;
@@ -727,6 +728,8 @@ module.exports = (pool) => {
       }
 
       // Get overview statistics
+      const taskTypeFilter = taskType === 'CM' ? "= 'CM'" : taskType === 'PM' ? "= 'PM'" : "IN ('PM', 'CM')";
+
       const [
         orgsResult,
         usersResult,
@@ -737,37 +740,41 @@ module.exports = (pool) => {
         newUsersResult,
         activeUsersResult,
         completedTasksResult,
-        pendingTasksResult
+        pendingTasksResult,
+        overdueTasksResult,
+        newAssetsResult
       ] = await Promise.all([
         db.query('SELECT COUNT(*) as count FROM organizations'),
         db.query('SELECT COUNT(*) as count FROM users WHERE organization_id IS NOT NULL'),
-        db.query("SELECT COUNT(*) as count FROM tasks WHERE task_type = 'PM'"),
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE task_type ${taskTypeFilter}`),
         db.query('SELECT COUNT(*) as count FROM assets'),
         db.query("SELECT COUNT(*) as count FROM organizations WHERE is_active = true"),
         db.query(`SELECT COUNT(*) as count FROM organizations WHERE created_at >= $1`, [startDate]),
         db.query(`SELECT COUNT(*) as count FROM users WHERE organization_id IS NOT NULL AND created_at >= $1`, [startDate]),
         db.query(`SELECT COUNT(DISTINCT u.id) as count FROM users u WHERE u.organization_id IS NOT NULL AND u.last_login >= $1`, [startDate]),
-        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND completed_at >= $1 AND task_type = 'PM'`, [startDate]),
-        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status IN ('pending', 'in_progress') AND task_type = 'PM'`)
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND completed_at >= $1 AND task_type ${taskTypeFilter}`, [startDate]),
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status IN ('pending', 'in_progress') AND task_type ${taskTypeFilter}`),
+        db.query(`SELECT COUNT(*) as count FROM tasks WHERE status IN ('pending', 'in_progress') AND scheduled_date < CURRENT_DATE AND task_type ${taskTypeFilter}`),
+        db.query(`SELECT COUNT(*) as count FROM assets WHERE created_at >= $1`, [startDate])
       ]);
 
       // Get usage trends (daily data)
       const trendsResult = await db.query(`
-        SELECT 
+        SELECT
           DATE(created_at) as date,
           COUNT(*) as tasks_created
         FROM tasks
-        WHERE created_at >= $1 AND task_type = 'PM'
+        WHERE created_at >= $1 AND task_type ${taskTypeFilter}
         GROUP BY DATE(created_at)
         ORDER BY date ASC
       `, [startDate]);
 
       const completionTrendsResult = await db.query(`
-        SELECT 
+        SELECT
           DATE(completed_at) as date,
           COUNT(*) as tasks_completed
         FROM tasks
-        WHERE completed_at >= $1 AND completed_at IS NOT NULL AND task_type = 'PM'
+        WHERE completed_at >= $1 AND completed_at IS NOT NULL AND task_type ${taskTypeFilter}
         GROUP BY DATE(completed_at)
         ORDER BY date ASC
       `, [startDate]);
@@ -775,15 +782,16 @@ module.exports = (pool) => {
       // Get organization activity
       // Use subqueries to avoid Cartesian product from JOINs that inflates counts
       const orgActivityResult = await db.query(`
-        SELECT 
+        SELECT
           o.id,
           o.name,
           o.slug,
           (SELECT COUNT(DISTINCT u.id) FROM users u WHERE u.organization_id = o.id) as user_count,
-          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type = 'PM') as task_count,
-          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.status = 'completed' AND t.task_type = 'PM') as completed_tasks
+          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type ${taskTypeFilter}) as task_count,
+          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.status = 'completed' AND t.task_type ${taskTypeFilter}) as completed_tasks,
+          (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.status IN ('pending','in_progress') AND t.scheduled_date < CURRENT_DATE AND t.task_type ${taskTypeFilter}) as overdue_tasks
         FROM organizations o
-        ORDER BY (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type = 'PM') DESC
+        ORDER BY (SELECT COUNT(*) FROM tasks t WHERE t.organization_id = o.id AND t.task_type ${taskTypeFilter}) DESC
       `);
 
       // Get user growth trend
@@ -861,7 +869,7 @@ module.exports = (pool) => {
             AND t.completed_at IS NOT NULL
           )::numeric, 1) as avg_hours
         FROM users u
-        LEFT JOIN tasks t ON t.assigned_to = u.id AND t.created_at >= $1
+        LEFT JOIN tasks t ON t.assigned_to = u.id AND t.created_at >= $1 AND t.task_type ${taskTypeFilter}
         LEFT JOIN organizations o ON u.organization_id = o.id
         WHERE u.organization_id IS NOT NULL
         GROUP BY u.id, u.full_name, u.role, o.name
@@ -902,6 +910,7 @@ module.exports = (pool) => {
       });
 
       res.json({
+        taskType,
         overview: {
           organizations: {
             total: parseInt(orgsResult.rows[0].count),
@@ -910,17 +919,18 @@ module.exports = (pool) => {
           },
           users: {
             total: parseInt(usersResult.rows[0].count),
-            active: parseInt(activeUsersResult.rows[0].count),
+            activeInPeriod: parseInt(activeUsersResult.rows[0].count),
             newThisPeriod: parseInt(newUsersResult.rows[0].count)
           },
           tasks: {
             total: parseInt(tasksResult.rows[0].count),
             completed: parseInt(completedTasksResult.rows[0].count),
-            pending: parseInt(pendingTasksResult.rows[0].count)
+            pending: parseInt(pendingTasksResult.rows[0].count),
+            overdue: parseInt(overdueTasksResult.rows[0].count)
           },
           assets: {
             total: parseInt(assetsResult.rows[0].count),
-            newThisPeriod: 0 // Can be calculated if needed
+            newThisPeriod: parseInt(newAssetsResult.rows[0].count)
           }
         },
         activity,
@@ -931,8 +941,9 @@ module.exports = (pool) => {
           user_count: parseInt(org.user_count),
           task_count: parseInt(org.task_count),
           completed_tasks: parseInt(org.completed_tasks),
-          completion_rate: org.task_count > 0 
-            ? Math.round((org.completed_tasks / org.task_count) * 100) 
+          overdue_tasks: parseInt(org.overdue_tasks || 0),
+          completion_rate: org.task_count > 0
+            ? Math.round((org.completed_tasks / org.task_count) * 100)
             : 0
         })),
         growth: {

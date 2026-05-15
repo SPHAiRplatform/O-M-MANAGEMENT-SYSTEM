@@ -39,6 +39,8 @@ function PlatformAnalytics() {
   const [error, setError] = useState('');
   const [analytics, setAnalytics] = useState(null);
   const [timeRange, setTimeRange] = useState('30d');
+  const [taskType, setTaskType] = useState('ALL');
+  const [orgFilter, setOrgFilter] = useState('all');
   const [performerSort, setPerformerSort] = useState({ key: 'overallScore', dir: 'desc' });
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [downloadStep, setDownloadStep] = useState('choose'); // 'choose' | 'selectCompany'
@@ -52,14 +54,14 @@ function PlatformAnalytics() {
       return;
     }
     loadAnalytics();
-  }, [isSuperAdmin, timeRange]);
+  }, [isSuperAdmin, timeRange, taskType]);
 
   const loadAnalytics = async () => {
     try {
       setLoading(true);
       setError('');
 
-      const response = await authFetch(`${getApiBaseUrl()}/platform/analytics?range=${timeRange}`);
+      const response = await authFetch(`${getApiBaseUrl()}/platform/analytics?range=${timeRange}&taskType=${taskType}`);
 
       if (!response.ok) {
         throw new Error('Failed to load analytics');
@@ -196,9 +198,11 @@ function PlatformAnalytics() {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
 
+    // Completion rate = completed ÷ created for that day (0 if no tasks created)
     const completionRates = analytics.activity.map(item => {
-      const total = (item.tasksCreated || 0) + (item.tasksCompleted || 0);
-      return total > 0 ? Math.round((item.tasksCompleted || 0) / total * 100) : 0;
+      const created = item.tasksCreated || 0;
+      const completed = item.tasksCompleted || 0;
+      return created > 0 ? Math.round(completed / created * 100) : null;
     });
 
     return {
@@ -212,6 +216,7 @@ function PlatformAnalytics() {
           borderWidth: 3,
           fill: true,
           tension: 0.4,
+          spanGaps: false,
           pointRadius: 5,
           pointHoverRadius: 7,
           pointBackgroundColor: '#9C27B0',
@@ -366,7 +371,10 @@ function PlatformAnalytics() {
 
   const getSortedPerformers = () => {
     if (!analytics?.performers) return [];
-    return [...analytics.performers].sort((a, b) => {
+    const filtered = orgFilter === 'all'
+      ? analytics.performers
+      : analytics.performers.filter(p => p.organization === orgFilter);
+    return [...filtered].sort((a, b) => {
       const aVal = a[performerSort.key] ?? 0;
       const bVal = b[performerSort.key] ?? 0;
       return performerSort.dir === 'desc' ? bVal - aVal : aVal - bVal;
@@ -718,6 +726,14 @@ function PlatformAnalytics() {
         
         <div className="analytics-controls">
           <div className="control-group">
+            <label>Task Type:</label>
+            <select value={taskType} onChange={(e) => setTaskType(e.target.value)} className="control-select">
+              <option value="ALL">All Tasks</option>
+              <option value="PM">PM Only</option>
+              <option value="CM">CM Only</option>
+            </select>
+          </div>
+          <div className="control-group">
             <label>Time Range:</label>
             <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="control-select">
               <option value="7d">Last 7 Days</option>
@@ -726,10 +742,7 @@ function PlatformAnalytics() {
               <option value="1y">Last Year</option>
             </select>
           </div>
-          <button
-            className="btn btn-secondary"
-            onClick={loadAnalytics}
-          >
+          <button className="btn btn-secondary" onClick={loadAnalytics}>
             Refresh
           </button>
         </div>
@@ -741,7 +754,7 @@ function PlatformAnalytics() {
           <div className="kpi-label">Total Organizations</div>
           <div className="kpi-value">{formatNumber(overview.organizations.total)}</div>
           <div className="kpi-detail">
-            {overview.organizations.active} active • {overview.organizations.newThisPeriod} new
+            {overview.organizations.active} active • {overview.organizations.newThisPeriod} new this period
           </div>
         </div>
 
@@ -749,7 +762,7 @@ function PlatformAnalytics() {
           <div className="kpi-label">Total Users</div>
           <div className="kpi-value">{formatNumber(overview.users.total)}</div>
           <div className="kpi-detail">
-            {overview.users.active} active • {overview.users.newThisPeriod} new
+            {overview.users.activeInPeriod} active in period • {overview.users.newThisPeriod} new
           </div>
         </div>
 
@@ -764,7 +777,7 @@ function PlatformAnalytics() {
         <div className="kpi-card">
           <div className="kpi-label">Task Completion Rate</div>
           <div className="kpi-value">
-            {overview.tasks.total > 0 
+            {overview.tasks.total > 0
               ? formatPercentage(Math.round((overview.tasks.completed / overview.tasks.total) * 100))
               : '0%'}
           </div>
@@ -773,11 +786,29 @@ function PlatformAnalytics() {
           </div>
         </div>
 
+        <div className={`kpi-card ${overview.tasks.overdue > 0 ? 'kpi-card-danger' : ''}`}>
+          <div className="kpi-label">Overdue Tasks</div>
+          <div className="kpi-value" style={{ color: overview.tasks.overdue > 0 ? '#F44335' : 'inherit' }}>
+            {formatNumber(overview.tasks.overdue)}
+          </div>
+          <div className="kpi-detail">
+            Past scheduled date, still open
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Total Assets</div>
+          <div className="kpi-value">{formatNumber(overview.assets.total)}</div>
+          <div className="kpi-detail">
+            {overview.assets.newThisPeriod} added this period
+          </div>
+        </div>
+
         <div className="kpi-card">
           <div className="kpi-label">Active Organizations</div>
           <div className="kpi-value">{formatNumber(overview.organizations.active)}</div>
           <div className="kpi-detail">
-            {overview.organizations.total > 0 
+            {overview.organizations.total > 0
               ? formatPercentage(Math.round((overview.organizations.active / overview.organizations.total) * 100))
               : '0%'} of total
           </div>
@@ -914,6 +945,7 @@ function PlatformAnalytics() {
                   <th>Users</th>
                   <th>Total Tasks</th>
                   <th>Completed</th>
+                  <th>Overdue</th>
                   <th>Completion Rate</th>
                   <th>Actions</th>
                 </tr>
@@ -928,6 +960,13 @@ function PlatformAnalytics() {
                     <td>{formatNumber(org.user_count)}</td>
                     <td>{formatNumber(org.task_count)}</td>
                     <td>{formatNumber(org.completed_tasks)}</td>
+                    <td>
+                      {org.overdue_tasks > 0 ? (
+                        <span style={{ color: '#F44335', fontWeight: 600 }}>{formatNumber(org.overdue_tasks)}</span>
+                      ) : (
+                        <span style={{ color: '#4CAF50' }}>0</span>
+                      )}
+                    </td>
                     <td>
                       <div className="completion-rate-cell">
                         <span className={`completion-rate ${org.completion_rate >= 80 ? 'high' : org.completion_rate >= 50 ? 'medium' : 'low'}`}>
@@ -1128,8 +1167,23 @@ function PlatformAnalytics() {
               Detailed KPI breakdown per employee — click column headers to sort
             </p>
           </div>
-          <div className="performer-count">
-            {analytics?.performers?.length || 0} employees tracked
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="control-group">
+              <label>Filter by Org:</label>
+              <select
+                value={orgFilter}
+                onChange={(e) => setOrgFilter(e.target.value)}
+                className="control-select"
+              >
+                <option value="all">All Organizations</option>
+                {(analytics?.organizations || []).map(org => (
+                  <option key={org.id} value={org.name}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="performer-count">
+              {getSortedPerformers().length} employees
+            </div>
           </div>
         </div>
         <div className="org-comparison-table-container">
