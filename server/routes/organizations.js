@@ -903,6 +903,9 @@ module.exports = (pool) => {
 
       const { logo_url, primary_color, secondary_color, company_name_display, favicon_url, custom_domain, site_map_name, branding_config = {} } = req.body;
 
+      // Treat empty strings as null so COALESCE falls back to existing values
+      const nullIfEmpty = (v) => (v === '' || v === undefined ? null : v);
+
       const result = await db.query(`
         INSERT INTO organization_branding (
           organization_id, logo_url, primary_color, secondary_color,
@@ -921,7 +924,7 @@ module.exports = (pool) => {
           branding_config = COALESCE(EXCLUDED.branding_config, organization_branding.branding_config),
           updated_at = CURRENT_TIMESTAMP
         RETURNING *
-      `, [id, logo_url, primary_color, secondary_color, company_name_display, favicon_url, custom_domain, site_map_name || 'Site Map', JSON.stringify(branding_config)]);
+      `, [id, nullIfEmpty(logo_url), nullIfEmpty(primary_color), nullIfEmpty(secondary_color), nullIfEmpty(company_name_display), nullIfEmpty(favicon_url), nullIfEmpty(custom_domain), site_map_name || 'Site Map', JSON.stringify(branding_config)]);
       
       res.json(result.rows[0]);
     } catch (error) {

@@ -129,6 +129,21 @@ function OrganizationBranding() {
     }));
   };
 
+  const isValidHex = (value) => /^#[0-9A-Fa-f]{6}$/.test(value);
+
+  const handleColorPickerChange = (name, value) => {
+    setBranding(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleHexInput = (name, value) => {
+    // Allow typing freely; only normalize if it looks like a valid hex
+    let normalized = value;
+    if (value && !value.startsWith('#')) {
+      normalized = '#' + value;
+    }
+    setBranding(prev => ({ ...prev, [name]: normalized }));
+  };
+
   const handleLogoFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -248,9 +263,34 @@ function OrganizationBranding() {
       setSaving(true);
       setError('');
 
+      // Validate colors — only send if they're valid hex or empty
+      const primaryColor = branding.primary_color || '';
+      const secondaryColor = branding.secondary_color || '';
+      if (primaryColor && !isValidHex(primaryColor)) {
+        setError('Primary color must be a valid hex value (e.g. #007bff)');
+        setSaving(false);
+        return;
+      }
+      if (secondaryColor && !isValidHex(secondaryColor)) {
+        setError('Secondary color must be a valid hex value (e.g. #6c757d)');
+        setSaving(false);
+        return;
+      }
+
+      let parsedBrandingConfig = {};
+      try {
+        parsedBrandingConfig = branding.branding_config ? JSON.parse(branding.branding_config) : {};
+      } catch {
+        setError('Additional Branding Config contains invalid JSON');
+        setSaving(false);
+        return;
+      }
+
       const brandingToSave = {
         ...branding,
-        branding_config: branding.branding_config ? JSON.parse(branding.branding_config) : {}
+        primary_color: primaryColor || null,
+        secondary_color: secondaryColor || null,
+        branding_config: parsedBrandingConfig
       };
 
       const response = await authFetch(`${getApiBaseUrl()}/organizations/${id}/branding`, {
@@ -372,27 +412,55 @@ function OrganizationBranding() {
           </div>
 
           <div className="form-group">
-            <label>Primary Color (Hex)</label>
-            <input
-              type="text"
-              name="primary_color"
-              value={branding.primary_color}
-              onChange={handleInputChange}
-              placeholder="#007bff"
-              pattern="#[0-9A-Fa-f]{6}"
-            />
+            <label>Primary Color</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="color"
+                value={isValidHex(branding.primary_color) ? branding.primary_color : '#007bff'}
+                onChange={(e) => handleColorPickerChange('primary_color', e.target.value)}
+                style={{ width: '48px', height: '38px', padding: '2px', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', flexShrink: 0 }}
+                title="Click to pick a color"
+              />
+              <input
+                type="text"
+                name="primary_color"
+                value={branding.primary_color}
+                onChange={(e) => handleHexInput('primary_color', e.target.value)}
+                placeholder="#007bff"
+                maxLength={7}
+                style={{ flex: 1, fontFamily: 'monospace' }}
+              />
+              {branding.primary_color && isValidHex(branding.primary_color) && (
+                <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: branding.primary_color, flexShrink: 0 }} title={branding.primary_color} />
+              )}
+            </div>
+            <small style={{ color: '#666' }}>Click the color swatch to open the color picker, or type a hex value (e.g. #007bff)</small>
           </div>
 
           <div className="form-group">
-            <label>Secondary Color (Hex)</label>
-            <input
-              type="text"
-              name="secondary_color"
-              value={branding.secondary_color}
-              onChange={handleInputChange}
-              placeholder="#6c757d"
-              pattern="#[0-9A-Fa-f]{6}"
-            />
+            <label>Secondary Color</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="color"
+                value={isValidHex(branding.secondary_color) ? branding.secondary_color : '#6c757d'}
+                onChange={(e) => handleColorPickerChange('secondary_color', e.target.value)}
+                style={{ width: '48px', height: '38px', padding: '2px', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', flexShrink: 0 }}
+                title="Click to pick a color"
+              />
+              <input
+                type="text"
+                name="secondary_color"
+                value={branding.secondary_color}
+                onChange={(e) => handleHexInput('secondary_color', e.target.value)}
+                placeholder="#6c757d"
+                maxLength={7}
+                style={{ flex: 1, fontFamily: 'monospace' }}
+              />
+              {branding.secondary_color && isValidHex(branding.secondary_color) && (
+                <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: branding.secondary_color, flexShrink: 0 }} title={branding.secondary_color} />
+              )}
+            </div>
+            <small style={{ color: '#666' }}>Click the color swatch to open the color picker, or type a hex value (e.g. #6c757d)</small>
           </div>
 
           <div className="form-group">
