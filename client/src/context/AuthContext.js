@@ -12,21 +12,22 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuth();
+
+    const handleDisplaced = () => {
+      setAuthToken(null);
+      setUser(null);
+      setDisplacedSession(true);
+    };
+    window.addEventListener('auth:session_displaced', handleDisplaced);
+    return () => window.removeEventListener('auth:session_displaced', handleDisplaced);
   }, []);
 
-  // Poll /auth/me every 30 seconds while logged in to detect session displacement
+  // Poll /auth/me every 30 seconds as a heartbeat — displacement is handled
+  // immediately by the global api.js interceptor via the auth:session_displaced event
   useEffect(() => {
     if (user) {
-      pollRef.current = setInterval(async () => {
-        try {
-          await getCurrentUser();
-        } catch (error) {
-          if (error.response?.data?.error === 'session_displaced') {
-            setAuthToken(null);
-            setUser(null);
-            setDisplacedSession(true);
-          }
-        }
+      pollRef.current = setInterval(() => {
+        getCurrentUser().catch(() => {});
       }, 30000);
     } else {
       clearInterval(pollRef.current);

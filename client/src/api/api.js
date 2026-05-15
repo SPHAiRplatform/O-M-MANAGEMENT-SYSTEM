@@ -229,6 +229,13 @@ api.interceptors.response.use(
     } else if (error.response) {
       const url = error.config?.url || '';
       const status = error.response.status;
+
+      // Immediately sign out if the server says this session was displaced by another device
+      if (status === 401 && error.response.data?.error === 'session_displaced') {
+        window.dispatchEvent(new CustomEvent('auth:session_displaced'));
+        return Promise.reject(error);
+      }
+
       const isExpected401 = status === 401 && (
         url.includes('/auth/me') ||
         url.includes('/notifications/unread-count') ||
