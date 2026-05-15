@@ -37,6 +37,7 @@ import PasswordChangeModal from './components/PasswordChangeModal';
 // import OfflineIndicator from './components/OfflineIndicator';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import FeedbackWidget from './components/FeedbackWidget';
+import InstallPrompt from './components/InstallPrompt';
 import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 import { usePageTitle } from './hooks/usePageTitle';
 import { OrganizationFeaturesProvider, useOrganizationFeatures } from './context/OrganizationFeaturesContext';
@@ -198,6 +199,7 @@ function AppContent() {
         onExtendSession={extendSession}
       />
       {user && !showPasswordModal && <FeedbackWidget />}
+      <InstallPrompt />
       <div className="container">
         <Routes>
           <Route path="/login" element={<Login />} />

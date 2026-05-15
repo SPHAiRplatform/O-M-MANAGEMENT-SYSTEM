@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1A73E8" />
+  <title>SPHAiRDigital — Offline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f6fa;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 48px 40px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    img { width: 80px; height: 80px; border-radius: 16px; margin-bottom: 24px; }
+    h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 12px; }
+    p { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 28px; }
+    button {
+      background: #1A73E8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 28px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:hover { background: #1558b0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/logo192.png" alt="SPHAiRDigital" />
+    <h1>You're offline</h1>
+    <p>No internet connection detected. Please check your connection and try again.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+  </div>
+</body>
+</html>

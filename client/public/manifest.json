@@ -1,5 +1,5 @@
 {
-  "short_name": "SPHAiRDigital",
+  "short_name": "SPHAiR O&M",
   "name": "SPHAiRDigital O&M System",
   "description": "Professional centralized digital O&M system for solar power plant maintenance operations",
   "icons": [
@@ -7,11 +7,26 @@
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
       "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "theme_color": "#1A73E8",
   "background_color": "#ffffff",
-  "orientation": "any"
+  "orientation": "any",
+  "categories": ["business", "productivity"],
+  "screenshots": []
 }

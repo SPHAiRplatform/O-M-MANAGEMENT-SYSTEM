@@ -12,5 +12,5 @@ root.render(
   </React.StrictMode>
 );
 
-// Unregister service worker so it does not intercept /home/ marketing site
-serviceWorkerRegistration.unregister();
+// Register service worker for PWA install support and offline caching
+serviceWorkerRegistration.register();
