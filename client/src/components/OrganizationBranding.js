@@ -400,7 +400,7 @@ function OrganizationBranding() {
           <div className="form-group">
             <label>Logo URL (Alternative)</label>
             <input
-              type="url"
+              type="text"
               name="logo_url"
               value={branding.logo_url}
               onChange={handleInputChange}
@@ -477,7 +477,7 @@ function OrganizationBranding() {
           <div className="form-group">
             <label>Favicon URL</label>
             <input
-              type="url"
+              type="text"
               name="favicon_url"
               value={branding.favicon_url}
               onChange={handleInputChange}
