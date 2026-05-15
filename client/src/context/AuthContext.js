@@ -51,9 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password, rememberMe = false) => {
     try {
-      console.log('Attempting login with:', { username, rememberMe });
       const response = await apiLogin(username, password, rememberMe);
-      console.log('Login response:', response.data);
       
       if (response.data && response.data.user) {
         if (response.data.token) {

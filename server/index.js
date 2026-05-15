@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 
 // Load logger and environment utilities FIRST (before other modules that might use console.log)
 const logger = require('./utils/logger');
@@ -130,9 +130,11 @@ app.get('/uploads/companies/:slug/:fileType/:filename', (req, res) => {
 // This also allows req.secure to work correctly for HTTPS detection
 // MUST be set BEFORE CORS and other middleware
 // Only enable if explicitly set (not for localhost)
-if (process.env.TRUST_PROXY === 'true' || process.env.DEV_TUNNELS === 'true') {
+// Always trust the first proxy in production (Nginx/Cloudflare on DigitalOcean)
+// so rate limiting uses the real client IP, not the proxy IP
+if (isProduction() || process.env.TRUST_PROXY === 'true' || process.env.DEV_TUNNELS === 'true') {
   app.set('trust proxy', 1);
-  logger.info('Trust proxy enabled (for Dev Tunnels/port forwarding)');
+  logger.info('Trust proxy enabled');
 }
 
 // Explicit OPTIONS handler for CORS preflight - MUST be first

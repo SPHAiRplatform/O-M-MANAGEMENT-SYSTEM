@@ -116,13 +116,10 @@ export function getApiBaseUrl() {
   const detectedUrl = isDefaultPort
     ? `${protocol}//${hostname}/api`
     : `${protocol}//${hostname}:3001/api`;
-  console.log('Auto-detected API URL:', detectedUrl);
   return detectedUrl;
 }
 
 const API_BASE_URL = getApiBaseUrl();
-
-console.log('API Base URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -153,22 +150,15 @@ try {
   if (stored) setAuthToken(stored);
 } catch (e) { /* ignore */ }
 
-// Add request interceptor for debugging
+// Add request interceptor
 api.interceptors.request.use(
-  (config) => {
-    console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`);
-    return config;
-  },
-  (error) => {
-    console.error('API Request Error:', error);
-    return Promise.reject(error);
-  }
+  (config) => config,
+  (error) => Promise.reject(error)
 );
 
 // Add response interceptor for error handling, activity tracking, and offline caching
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response: ${response.config.method.toUpperCase()} ${response.config.url}`, response.status);
 
     // Only track successful API calls as activity (exclude auth endpoints and work context checks)
     // This prevents failed requests from resetting the inactivity timer

@@ -69,7 +69,6 @@ const standardLimiter = rateLimit({
   keyGenerator: (req) => getClientIdentifier(req),
   skip: (req) => {
     if (isDevelopment()) return true;
-    if (req.session && req.session.userId) return true;
     return false;
   },
   handler: (req, res) => {

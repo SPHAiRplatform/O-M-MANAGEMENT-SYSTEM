@@ -30,7 +30,7 @@ function PlatformDashboard() {
         authFetch(`${getApiBaseUrl()}/platform/stats`),
         authFetch(`${getApiBaseUrl()}/platform/organizations`),
         authFetch(`${getApiBaseUrl()}/platform/health`).catch(() => null),
-        authFetch(`${getApiBaseUrl()}/platform/activity?limit=10`).catch(() => null)
+        authFetch(`${getApiBaseUrl()}/platform/activity?limit=5`).catch(() => null)
       ]);
 
       if (!statsResponse.ok || !orgsResponse.ok) {

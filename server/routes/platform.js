@@ -963,7 +963,7 @@ module.exports = (pool) => {
       }
 
       const db = getDb(req, pool);
-      const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+      const limit = Math.min(parseInt(req.query.limit) || 5, 5);
 
       // Get recent tasks created/completed across all orgs
       const recentTasks = await db.query(`
