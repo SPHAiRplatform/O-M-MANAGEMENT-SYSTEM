@@ -201,6 +201,11 @@
     });
   });
 
+  /**
+   * Navmenu Scrollspy — update active link and URL as user scrolls
+   */
+  let scrollspyEnabled = true;
+
   // On load, scroll to the section matching the current path and set active nav
   window.addEventListener('load', function() {
     const path = window.location.pathname.replace(/\/$/, '') || '/home';
@@ -208,7 +213,6 @@
     if (sectionId && sectionId !== 'hero') {
       history.replaceState(null, '', path);
       scrollspyEnabled = false;
-      // Set correct active nav link immediately based on URL
       document.querySelectorAll('.navmenu a').forEach(link => {
         link.classList.remove('active');
         if (link.getAttribute('href') === path) link.classList.add('active');
@@ -218,11 +222,6 @@
       setTimeout(() => { scrollToSection(sectionId); scrollspyEnabled = true; }, 1800);
     }
   });
-
-  /**
-   * Navmenu Scrollspy — update active link and URL as user scrolls
-   */
-  let scrollspyEnabled = true;
 
   function navmenuScrollspy() {
     if (!scrollspyEnabled) return;
