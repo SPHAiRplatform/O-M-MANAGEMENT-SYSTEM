@@ -163,42 +163,80 @@
   });
 
   /**
-   * Correct scrolling position upon page load for URLs containing hash links.
+   * Clean URL navigation — map /home/section paths to on-page sections
    */
-  window.addEventListener('load', function(e) {
-    if (window.location.hash) {
-      if (document.querySelector(window.location.hash)) {
-        setTimeout(() => {
-          let section = document.querySelector(window.location.hash);
-          let scrollMarginTop = getComputedStyle(section).scrollMarginTop;
-          window.scrollTo({
-            top: section.offsetTop - parseInt(scrollMarginTop),
-            behavior: 'smooth'
-          });
-        }, 100);
-      }
+  const sectionMap = {
+    '/home/about':    'about',
+    '/home/services': 'services',
+    '/home/contact':  'contact',
+    '/home':          'hero',
+    '/home/':         'hero',
+  };
+
+  const sections = [
+    { id: 'hero',     path: '/home' },
+    { id: 'about',    path: '/home/about' },
+    { id: 'services', path: '/home/services' },
+    { id: 'contact',  path: '/home/contact' },
+  ];
+
+  function scrollToSection(id) {
+    const section = document.getElementById(id);
+    if (!section) return;
+    const scrollMarginTop = parseInt(getComputedStyle(section).scrollMarginTop) || 80;
+    window.scrollTo({ top: section.offsetTop - scrollMarginTop, behavior: 'smooth' });
+  }
+
+  // Intercept nav clicks with clean URLs
+  document.querySelectorAll('a[href^="/home"]').forEach(link => {
+    const href = link.getAttribute('href');
+    const sectionId = sectionMap[href];
+    if (!sectionId) return; // let real pages (pricing, book-a-pilot) navigate normally
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      history.pushState(null, '', href);
+      scrollToSection(sectionId);
+      if (document.querySelector('.mobile-nav-active')) mobileNavToogle();
+    });
+  });
+
+  // On load, scroll to the section matching the current path
+  window.addEventListener('load', function() {
+    const path = window.location.pathname.replace(/\/$/, '') || '/home';
+    const sectionId = sectionMap[path];
+    if (sectionId && sectionId !== 'hero') {
+      // Clear any hash so browser doesn't fight us
+      history.replaceState(null, '', path);
+      setTimeout(() => scrollToSection(sectionId), 300);
     }
   });
 
   /**
-   * Navmenu Scrollspy
+   * Navmenu Scrollspy — update active link and URL as user scrolls
    */
-  let navmenulinks = document.querySelectorAll('.navmenu a');
-
   function navmenuScrollspy() {
-    navmenulinks.forEach(navmenulink => {
-      if (!navmenulink.hash) return;
-      let section = document.querySelector(navmenulink.hash);
-      if (!section) return;
-      let position = window.scrollY + 200;
-      if (position >= section.offsetTop && position <= (section.offsetTop + section.offsetHeight)) {
-        document.querySelectorAll('.navmenu a.active').forEach(link => link.classList.remove('active'));
-        navmenulink.classList.add('active');
-      } else {
-        navmenulink.classList.remove('active');
+    const position = window.scrollY + 200;
+    let current = sections[0];
+
+    sections.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el && position >= el.offsetTop) current = s;
+    });
+
+    // Update active nav link
+    document.querySelectorAll('.navmenu a').forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === current.path) {
+        link.classList.add('active');
       }
-    })
+    });
+
+    // Update URL without adding history entries, never use a hash
+    if (window.location.pathname !== current.path || window.location.hash) {
+      history.replaceState(null, '', current.path);
+    }
   }
+
   window.addEventListener('load', navmenuScrollspy);
   document.addEventListener('scroll', navmenuScrollspy);
 
