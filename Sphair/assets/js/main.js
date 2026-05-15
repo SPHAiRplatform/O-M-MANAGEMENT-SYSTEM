@@ -201,12 +201,17 @@
     });
   });
 
-  // On load, scroll to the section matching the current path
+  // On load, scroll to the section matching the current path and set active nav
   window.addEventListener('load', function() {
     const path = window.location.pathname.replace(/\/$/, '') || '/home';
     const sectionId = sectionMap[path];
     if (sectionId && sectionId !== 'hero') {
       history.replaceState(null, '', path);
+      // Set correct active nav link immediately based on URL
+      document.querySelectorAll('.navmenu a').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === path) link.classList.add('active');
+      });
       setTimeout(() => scrollToSection(sectionId), 200);
       setTimeout(() => scrollToSection(sectionId), 800);
       setTimeout(() => scrollToSection(sectionId), 1500);
