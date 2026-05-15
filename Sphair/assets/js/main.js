@@ -183,8 +183,9 @@
   function scrollToSection(id) {
     const section = document.getElementById(id);
     if (!section) return;
-    const scrollMarginTop = parseInt(getComputedStyle(section).scrollMarginTop) || 80;
-    window.scrollTo({ top: section.offsetTop - scrollMarginTop, behavior: 'smooth' });
+    const headerHeight = document.querySelector('#header') ? document.querySelector('#header').offsetHeight : 80;
+    const top = section.getBoundingClientRect().top + window.scrollY - headerHeight;
+    window.scrollTo({ top: top, behavior: 'smooth' });
   }
 
   // Intercept nav clicks with clean URLs
@@ -206,8 +207,9 @@
     const sectionId = sectionMap[path];
     if (sectionId && sectionId !== 'hero') {
       history.replaceState(null, '', path);
-      setTimeout(() => scrollToSection(sectionId), 100);
-      setTimeout(() => scrollToSection(sectionId), 600);
+      setTimeout(() => scrollToSection(sectionId), 200);
+      setTimeout(() => scrollToSection(sectionId), 800);
+      setTimeout(() => scrollToSection(sectionId), 1500);
     }
   });
 
