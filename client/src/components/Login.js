@@ -458,7 +458,7 @@ function Login() {
               </button>
             </form>
             <div className="login-footer">
-              <p className="text-muted">Need help? Contact your support team</p>
+              <p className="text-muted">Need help? Contact your administrator</p>
               <p style={{ marginTop: '12px', fontSize: '11px', color: 'var(--md-text-main)', opacity: 0.6 }}>
                 &copy; {new Date().getFullYear()} SPHAiRDigital. All rights reserved.
               </p>

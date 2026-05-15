@@ -998,9 +998,6 @@ function Header() {
         <Link to="/tenant/profile" className={location.pathname === '/tenant/profile' ? 'active' : ''}>
           Profile
         </Link>
-        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', padding: '4px 8px', whiteSpace: 'nowrap', userSelect: 'none' }}>
-          &copy; {new Date().getFullYear()} SPHAiRDigital
-        </span>
       </nav>
     </div>
   );
