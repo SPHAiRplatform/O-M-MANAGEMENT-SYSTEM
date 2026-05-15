@@ -818,6 +818,50 @@ table td {
 }
 
 /* ============================================
+   TABLET STYLES (768px – 1024px)
+   ============================================ */
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .container {
+    max-width: 100%;
+    padding: 12px 20px;
+  }
+
+  .card {
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  /* Tables stay as real tables on tablet — just tighten padding */
+  table th,
+  table td {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Buttons stay inline on tablet */
+  .btn {
+    width: auto;
+    font-size: 13px;
+  }
+
+  .dashboard-stats {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .modal-content {
+    max-width: 90%;
+    padding: 20px;
+  }
+}
+
+/* ============================================
    MOBILE STYLES (Below 768px)
    Material Design Mobile Optimizations
    ============================================ */
@@ -878,7 +922,11 @@ table td {
   .inventory-header .btn,
   .inventory-container .card .btn,
   .calendar-controls .btn,
-  .cm-filters .btn {
+  .cm-filters .btn,
+  table td .btn,
+  table td button,
+  .table-responsive .btn,
+  .table-responsive button {
     width: auto !important;
     margin-bottom: 0 !important;
     min-height: auto !important;
@@ -1111,6 +1159,30 @@ table td {
 
   table td:last-child {
     border-bottom: none;
+  }
+
+  /* Action cells: label on left, buttons inline on right — never wrap */
+  table td[data-label="Action"] {
+    align-items: center;
+  }
+
+  table td[data-label="Action"] > div {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    justify-content: flex-end !important;
+  }
+
+  table td[data-label="Action"] .btn,
+  table td[data-label="Action"] button {
+    width: auto !important;
+    min-height: auto !important;
+    margin-bottom: 0 !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    flex-shrink: 0 !important;
   }
 
   .checkbox-group label,
