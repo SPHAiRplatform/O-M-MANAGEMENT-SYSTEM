@@ -205,9 +205,9 @@
     const path = window.location.pathname.replace(/\/$/, '') || '/home';
     const sectionId = sectionMap[path];
     if (sectionId && sectionId !== 'hero') {
-      // Clear any hash so browser doesn't fight us
       history.replaceState(null, '', path);
-      setTimeout(() => scrollToSection(sectionId), 300);
+      setTimeout(() => scrollToSection(sectionId), 100);
+      setTimeout(() => scrollToSection(sectionId), 600);
     }
   });
 
