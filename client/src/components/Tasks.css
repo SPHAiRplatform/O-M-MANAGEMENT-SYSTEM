@@ -1,5 +1,17 @@
 /* Tasks – compact filters on mobile */
 @media (max-width: 768px) {
+  /* Buttons inside the tasks table stay compact */
+  .tasks-table .btn,
+  .tasks-table button,
+  .table-responsive .btn,
+  .table-responsive button {
+    width: auto !important;
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+    min-height: 30px !important;
+    margin-bottom: 0 !important;
+  }
+
   .tasks-filters {
     margin-bottom: 12px !important;
   }

@@ -87,9 +87,7 @@ function ChecklistTemplates() {
 
   const loadTemplates = async () => {
     try {
-      console.log('Loading checklist templates...');
       const response = await getChecklistTemplates();
-      console.log('Templates response:', response.data);
       setTemplates(response.data);
       setLoading(false);
     } catch (error) {
@@ -889,6 +887,7 @@ function ChecklistTemplates() {
 
             return (
               <>
+                <div className="table-responsive">
                 <table className="checklist-templates-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #ddd' }}>
@@ -911,7 +910,7 @@ function ChecklistTemplates() {
                         </td>
                         <td data-label="Frequency" style={{ padding: '10px' }}>{template.frequency || 'N/A'}</td>
                         <td data-label="Action" style={{ padding: '10px' }}>
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
                             <button
                               className="btn btn-primary"
                               onClick={() => handleViewDetails(template.id)}
@@ -956,9 +955,10 @@ function ChecklistTemplates() {
                     ))}
                   </tbody>
                 </table>
-                
-                <div style={{ 
-                  display: 'flex', 
+                </div>
+
+                <div style={{
+                  display: 'flex',
                   justifyContent: 'space-between', 
                   alignItems: 'center', 
                   marginTop: '15px',

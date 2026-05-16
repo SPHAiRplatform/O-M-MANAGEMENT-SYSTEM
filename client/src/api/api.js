@@ -15,10 +15,9 @@ export function getApiBaseUrl() {
   if (apiUrlParam) {
     try {
       const parsed = new URL(apiUrlParam);
-      console.log('Using API URL from query parameter:', parsed.origin + '/api');
       return parsed.origin + '/api';
     } catch (e) {
-      console.warn('Invalid apiUrl parameter, ignoring:', apiUrlParam);
+      // ignore invalid apiUrl param
     }
   }
 
@@ -30,44 +29,18 @@ export function getApiBaseUrl() {
   if (hostname.includes('devtunnels.ms')) {
     const backendHostname = hostname.replace(/-3000\./, '-3001.');
     const detectedUrl = `${protocol}//${backendHostname}/api`;
-    console.log('Dev Tunnels URL detected. Auto-detected backend API URL:', detectedUrl);
     return detectedUrl;
   }
-  
-  // ngrok: Different subdomains for each port, need manual config
-  // But we can detect it and show a helpful message
-  if (hostname.includes('ngrok') || hostname.includes('ngrok-free.app') || hostname.includes('ngrok.io')) {
-    console.log('ngrok URL detected. Backend URL must be configured manually via setup page or URL parameter.');
-    // Fall through to check localStorage/query params
-  }
-  
-  // Cloudflare Tunnel: Different subdomains for each port
-  if (hostname.includes('trycloudflare.com') || hostname.includes('cfargotunnel.com')) {
-    console.log('Cloudflare Tunnel URL detected. Backend URL must be configured manually via setup page or URL parameter.');
-    // Fall through to check localStorage/query params
-  }
-  
-  // localhost.run: Different subdomains for each port
-  if (hostname.includes('localhost.run')) {
-    console.log('localhost.run URL detected. Backend URL must be configured manually via setup page or URL parameter.');
-    // Fall through to check localStorage/query params
-  }
-  
-  // localtunnel: Different subdomains for each port
-  if (hostname.includes('loca.lt')) {
-    console.log('localtunnel URL detected. Backend URL must be configured manually via setup page or URL parameter.');
-    // Fall through to check localStorage/query params
-  }
+
+  // ngrok/Cloudflare/localhost.run/localtunnel: fall through to localStorage/query params
 
   // Priority 3: Check localStorage for stored backend URL (for port forwarding)
   const storedApiUrl = localStorage.getItem('backendApiUrl');
   if (storedApiUrl) {
     try {
       const parsed = new URL(storedApiUrl);
-      console.log('Using stored backend API URL:', parsed.origin + '/api');
       return parsed.origin + '/api';
     } catch (e) {
-      console.warn('Invalid stored API URL, clearing:', storedApiUrl);
       localStorage.removeItem('backendApiUrl');
     }
   }
@@ -78,18 +51,10 @@ export function getApiBaseUrl() {
     try {
       const parsed = new URL(envUrl);
       if (parsed.hostname === hostname) {
-        console.log('Using REACT_APP_API_URL (host matches page):', envUrl);
         return envUrl;
       }
-
-      // If hostname doesn't match, it's likely a port forwarding scenario
-      // Don't use the env URL to avoid cookie issues
-      console.log(
-        'REACT_APP_API_URL hostname does not match current page hostname; using auto-detected API URL for session cookies.',
-        { envUrl, pageHost: hostname }
-      );
+      // hostname doesn't match — port forwarding scenario; fall through to auto-detect
     } catch (e) {
-      console.warn('Invalid REACT_APP_API_URL; using it as-is:', envUrl, e);
       return envUrl;
     }
   }
@@ -101,13 +66,7 @@ export function getApiBaseUrl() {
                             hostname.includes('codespaces');
   
   if (isVSCodeForwarded) {
-    // For VS Code port forwarding, we need the backend forwarded URL
-    // This should be provided via query parameter or localStorage
-    // Fallback: try to use the same hostname with port 3001 (may not work)
-    const detectedUrl = `${protocol}//${hostname}:3001/api`;
-    console.warn('VS Code forwarded URL detected. Backend URL should be provided via ?apiUrl= parameter or localStorage.');
-    console.log('Attempting auto-detected API URL (may not work):', detectedUrl);
-    return detectedUrl;
+    return `${protocol}//${hostname}:3001/api`;
   }
 
   // Priority 6: Same origin (production) or localhost:3001 (dev)
@@ -198,8 +157,7 @@ api.interceptors.response.use(
         const cacheKey = `api_${error.config.url}`;
         const cached = await offlineStorage.getCache(cacheKey);
         if (cached && cached.data) {
-          console.log(`Serving cached response for: ${error.config.url}`);
-          return {
+              return {
             data: cached.data,
             status: cached.status || 200,
             statusText: 'OK (Cached)',
@@ -319,8 +277,6 @@ const makeOfflineAware = (apiCall, method = 'POST', urlBuilder = null, dataExtra
     } catch (error) {
       // If it's a network error and we're offline, queue it
       if (!navigator.onLine || (!error.response && (error.message.includes('Network Error') || error.code === 'ERR_NETWORK'))) {
-        console.log(`Offline: queueing ${method} request for sync`);
-
         const url = urlBuilder ? urlBuilder(...args) : '';
         const data = dataExtractor ? dataExtractor(...args) : (typeof args[0] === 'object' ? args[0] : {});
 
@@ -387,10 +343,7 @@ export const downloadTaskReport = (id, format = null) => {
   // ensuring session cookies are sent (prevents "Authentication required").
   const baseUrl = getApiBaseUrl();
   const formatParam = format ? `?format=${encodeURIComponent(format)}` : '';
-  const url = `${baseUrl}/tasks/${id}/report${formatParam}`;
-  console.log(`${(format || 'auto').toUpperCase()} Report Download URL:`, url);
-  console.log('Task ID:', id);
-  return url;
+  return `${baseUrl}/tasks/${id}/report${formatParam}`;
 };
 
 // Checklist Responses
@@ -608,10 +561,7 @@ export const downloadFaultLog = async (period = 'all', params = {}) => {
     url += `&endDate=${params.endDate}`;
   }
   
-  console.log('[DOWNLOAD] Starting fault log download from:', url);
-  
   try {
-    // Use fetch with credentials to ensure cookies are sent
     const response = await authFetch(url, {
       method: 'GET',
       headers: {
@@ -645,10 +595,9 @@ export const downloadFaultLog = async (period = 'all', params = {}) => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(downloadUrl);
 
-    console.log('[DOWNLOAD] Fault log downloaded successfully:', filename);
     return { success: true, filename };
   } catch (error) {
-    console.error('[DOWNLOAD] Error downloading fault log:', error);
+    console.error('Error downloading fault log:', error);
     throw error;
   }
 };
@@ -663,19 +612,13 @@ export const downloadInventoryExcel = async () => {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/inventory/download`;
   
-  console.log('[DOWNLOAD] Starting inventory download from:', url);
-  
   try {
-    // Use fetch with credentials to ensure cookies are sent
     const response = await authFetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }
     });
-
-    console.log('[DOWNLOAD] Response status:', response.status, response.statusText);
-    console.log('[DOWNLOAD] Response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       let errorData;
@@ -685,22 +628,16 @@ export const downloadInventoryExcel = async () => {
           errorData = await response.json();
         } else {
           const text = await response.text();
-          console.error('[DOWNLOAD] Error response text:', text);
           errorData = { error: text || 'Failed to download inventory' };
         }
       } catch (parseError) {
-        console.error('[DOWNLOAD] Error parsing error response:', parseError);
         errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
       }
-      console.error('[DOWNLOAD] Error data:', errorData);
       throw new Error(errorData.error || errorData.details || 'Failed to download inventory');
     }
 
-    // Get the blob from response
-    console.log('[DOWNLOAD] Reading response as blob...');
     const blob = await response.blob();
-    console.log('[DOWNLOAD] Blob created, size:', blob.size, 'bytes, type:', blob.type);
-    
+
     if (blob.size === 0) {
       throw new Error('Downloaded file is empty');
     }
@@ -714,15 +651,10 @@ export const downloadInventoryExcel = async () => {
     link.click();
     document.body.removeChild(link);
     
-    // Clean up the object URL
     window.URL.revokeObjectURL(downloadUrl);
-    
-    console.log('[DOWNLOAD] Download triggered successfully');
     return Promise.resolve();
   } catch (error) {
-    console.error('[DOWNLOAD] Error downloading inventory Excel:', error);
-    console.error('[DOWNLOAD] Error message:', error.message);
-    console.error('[DOWNLOAD] Error stack:', error.stack);
+    console.error('Error downloading inventory Excel:', error);
     throw error;
   }
 };

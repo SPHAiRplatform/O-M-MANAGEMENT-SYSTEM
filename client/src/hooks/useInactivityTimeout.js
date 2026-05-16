@@ -64,17 +64,14 @@ export const useInactivityTimeout = () => {
     // Check for recent API activity (within last 10 minutes)
     const timeSinceLastApi = Date.now() - lastApiActivityRef.current;
     if (timeSinceLastApi < RECENT_API_THRESHOLD) {
-      console.log('[INACTIVITY] Recent API activity detected');
       return true;
     }
 
-    // Check for unsaved drafts in localStorage
-    const draftKeys = Object.keys(localStorage).filter(key => 
+    const draftKeys = Object.keys(localStorage).filter(key =>
       key.startsWith('draft_') || key.startsWith('checklist_draft_')
     );
-    
+
     if (draftKeys.length > 0) {
-      console.log('[INACTIVITY] User has unsaved drafts:', draftKeys.length);
       return true;
     }
 
@@ -92,15 +89,11 @@ export const useInactivityTimeout = () => {
     const now = Date.now();
     const cacheAge = now - workContextCacheRef.current.timestamp;
     if (workContextCacheRef.current.result !== null && cacheAge < WORK_CONTEXT_CACHE_DURATION) {
-      console.log('[INACTIVITY] Using cached work context result');
       return workContextCacheRef.current.result;
     }
 
-    // Throttle API calls - don't check more frequently than WORK_CONTEXT_CHECK_INTERVAL
     const timeSinceLastCheck = now - lastWorkContextCheckRef.current;
     if (timeSinceLastCheck < WORK_CONTEXT_CHECK_INTERVAL) {
-      console.log('[INACTIVITY] Work context check throttled');
-      // Return cached result if available, otherwise check other activity
       if (workContextCacheRef.current.result !== null) {
         return workContextCacheRef.current.result;
       }
@@ -112,8 +105,6 @@ export const useInactivityTimeout = () => {
     if (backoffDelay > 0) {
       const timeSinceLastFailure = now - lastWorkContextCheckRef.current;
       if (timeSinceLastFailure < backoffDelay) {
-        console.log(`[INACTIVITY] Applying backoff delay (${backoffDelay}ms remaining)`);
-        // Return cached result if available
         if (workContextCacheRef.current.result !== null) {
           return workContextCacheRef.current.result;
         }
@@ -168,7 +159,6 @@ export const useInactivityTimeout = () => {
       );
 
       if (activeTasks.length > 0) {
-        console.log('[INACTIVITY] User has active tasks:', activeTasks.length);
         const result = true;
         workContextCacheRef.current = { result, timestamp: now };
         return result;
@@ -183,7 +173,6 @@ export const useInactivityTimeout = () => {
       });
 
       if (recentTasks.length > 0) {
-        console.log('[INACTIVITY] User has recent tasks:', recentTasks.length);
         const result = true;
         workContextCacheRef.current = { result, timestamp: now };
         return result;
@@ -196,18 +185,14 @@ export const useInactivityTimeout = () => {
     } catch (error) {
       // Don't treat failed requests as activity - only successful ones
       if (error.name === 'AbortError' || error.name === 'CanceledError') {
-        console.log('[INACTIVITY] Work context check was cancelled');
-        // Return cached result if available
         if (workContextCacheRef.current.result !== null) {
           return workContextCacheRef.current.result;
         }
         return checkOtherActivity();
       }
       
-      // Increment failure count
       consecutiveFailuresRef.current += 1;
-      console.error('[INACTIVITY] Error checking work context:', error);
-      console.log(`[INACTIVITY] Consecutive failures: ${consecutiveFailuresRef.current}`);
+      console.error('Error checking work context:', error);
       
       // On error, check other activity indicators (don't make API call)
       const result = checkOtherActivity();
@@ -252,8 +237,6 @@ export const useInactivityTimeout = () => {
       // Check if user has active work context (this is now throttled and cached)
       const hasActiveWork = await hasActiveWorkContext();
       const timeoutDuration = hasActiveWork ? WORK_ACTIVE_TIMEOUT : IDLE_TIMEOUT;
-      
-      console.log(`[INACTIVITY] Timer reset. Timeout: ${hasActiveWork ? 'WORK-ACTIVE' : 'IDLE'} (${timeoutDuration / 60000} minutes)`);
 
       // Set warning timeout (5 minutes before logout)
       const warningTime = timeoutDuration - WARNING_TIME;
@@ -281,12 +264,9 @@ export const useInactivityTimeout = () => {
         const stillHasActiveWork = await hasActiveWorkContext();
         
         if (stillHasActiveWork) {
-          console.log('[INACTIVITY] User still has active work, extending timeout');
-          resetTimer(); // Extend timeout
+          resetTimer();
           return;
         }
-
-        console.log('[INACTIVITY] Logging out due to inactivity');
         setShowWarning(false);
         await logout();
       }, timeoutDuration);
@@ -309,7 +289,6 @@ export const useInactivityTimeout = () => {
    * Extend session (user clicked "Stay Logged In")
    */
   const extendSession = useCallback(() => {
-    console.log('[INACTIVITY] User extended session');
     setShowWarning(false);
     setTimeRemaining(0);
     resetTimer();

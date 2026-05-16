@@ -123,7 +123,6 @@ function ChecklistForm() {
       setFilteredInventoryOptions(items);
     } catch (e) {
       // inventory is optional; don't block checklist
-      console.log('Inventory not available:', e?.message);
     }
   };
 
@@ -285,7 +284,6 @@ function ChecklistForm() {
         try {
           draft = await getDraftResponse(id);
         } catch (e) {
-          console.log('No server draft found');
         }
 
         // Choose the most recent data source: sessionStorage backup vs server draft
@@ -296,7 +294,6 @@ function ChecklistForm() {
           (!draft || (sessionBackup.savedAt && sessionBackup.savedAt > Date.now() - 60000));
 
         if (useSessionBackup && sessionBackup) {
-          console.log('Restoring from sessionStorage backup (camera recovery)');
           setFormData(mergeDeep(initialData, sessionBackup.formData));
           setMetadata({
             maintenance_team: sessionBackup.metadata?.maintenance_team || '',
@@ -315,7 +312,6 @@ function ChecklistForm() {
           // Clear the backup now that it's been restored
           sessionStorage.removeItem(`checklist_backup_${id}`);
         } else if (draft) {
-          console.log('Draft loaded and merged from server');
           const draftResponseData = draft.response_data || {};
           setFormData(mergeDeep(initialData, draftResponseData));
           setMetadata({
@@ -341,7 +337,6 @@ function ChecklistForm() {
           sessionStorage.removeItem(`checklist_backup_${id}`);
         } else {
           setFormData(initialData);
-          console.log('No draft found, starting fresh');
         }
       }
       

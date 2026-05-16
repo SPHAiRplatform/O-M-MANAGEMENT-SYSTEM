@@ -42,6 +42,20 @@
     max-width: 200px;
     align-self: flex-end;
   }
+
+  /* Action buttons in user table stay compact and inline */
+  td[data-label="Action"] .btn,
+  td[data-label="Action"] button {
+    width: auto !important;
+    min-height: auto !important;
+    margin-bottom: 0 !important;
+    flex-shrink: 0;
+  }
+
+  td[data-label="Action"] > div {
+    flex-wrap: nowrap !important;
+    justify-content: flex-end !important;
+  }
 }
 
 .form-card {

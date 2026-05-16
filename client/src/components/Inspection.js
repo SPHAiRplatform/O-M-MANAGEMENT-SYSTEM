@@ -60,7 +60,6 @@ function Inspection() {
 
   const loadTemplates = async () => {
     try {
-      console.log('Loading templates for inspection creation...');
       const response = await getChecklistTemplates();
       // Filter templates for inspection type
       const inspectionTemplates = response.data.filter(t => 
@@ -442,7 +441,7 @@ function Inspection() {
         </div>
       ) : (
         <div className="card">
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #ddd' }}>

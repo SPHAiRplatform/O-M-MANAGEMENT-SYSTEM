@@ -277,7 +277,6 @@ module.exports = (pool) => {
         if (!isDevelopment()) {
           const existingToken = await getUserSession(user.id);
           if (existingToken) {
-            console.log(`[AUTH] User ${user.id} has existing session, invalidating old session`);
             // Delete the old token from Redis
             await deleteRedisToken(existingToken);
             // Destroy the old session if it exists in the database

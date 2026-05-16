@@ -89,9 +89,7 @@ function Tasks() {
         return;
       }
       
-      console.log('Loading templates for task creation...');
       const response = await getChecklistTemplates();
-      console.log('Templates loaded:', response.data);
       setTemplates(response.data);
     } catch (error) {
       console.error('Error loading templates:', error);
@@ -598,6 +596,7 @@ function Tasks() {
 
               return (
                 <>
+                  <div className="table-responsive">
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid #ddd' }}>
@@ -737,11 +736,12 @@ function Tasks() {
                       })}
                     </tbody>
                   </table>
-                  
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
                     marginTop: '15px',
                     flexWrap: 'wrap',
                     gap: '10px',

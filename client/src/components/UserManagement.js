@@ -838,7 +838,7 @@ function UserManagement() {
                               </td>
                               <td data-label="Action">
                                 {(hasRole('system_owner') || isSuperAdmin()) && user.id !== currentUser?.id && (
-                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     <button
                                       className="btn btn-sm btn-primary"
                                       onClick={() => handleEditRoles(user)}

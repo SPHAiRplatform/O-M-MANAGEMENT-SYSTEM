@@ -25,7 +25,7 @@ const server = http.createServer((req, res) => {
   let filePath = decodeURIComponent(req.url.split('?')[0]);
   
   // Default to index.html
-  if (filePath === '/') {
+  if (filePath === '/' || filePath === '/home') {
     filePath = '/index.html';
   }
   

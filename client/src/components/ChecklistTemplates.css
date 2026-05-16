@@ -94,18 +94,42 @@
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
-  .checklist-templates-table .btn {
-    padding: 6px 12px;
-    font-size: 11px;
-    min-height: 30px;
+  /* Buttons inside the templates table stay compact — not full width */
+  .checklist-templates-table .btn,
+  .checklist-templates-table button {
+    width: auto !important;
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+    min-height: 30px !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Action cell: keep View + delete on one line */
+  .checklist-templates-table td[data-label="Action"] > div {
+    flex-wrap: nowrap !important;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .checklist-templates-table td[data-label="Action"] {
+    flex-wrap: nowrap !important;
   }
 
   .modal-content {
     padding: 16px;
     width: 95%;
+    max-height: 85vh;
   }
 
   .checklist-structure-editor {
-    max-height: 400px;
+    max-height: 350px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .checklist-templates-table .btn {
+    padding: 6px 14px;
+    font-size: 12px;
   }
 }

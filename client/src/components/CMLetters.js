@@ -393,6 +393,7 @@ function CMLetters() {
           <p>No CM letters found{filter.status || filter.startDate || filter.endDate ? ' matching the selected filters' : ''}</p>
         ) : (
           <>
+            <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #ddd' }}>
@@ -526,11 +527,12 @@ function CMLetters() {
                 })}
               </tbody>
             </table>
-            
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
+            </div>
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               marginTop: '15px',
               flexWrap: 'wrap',
               gap: '10px',

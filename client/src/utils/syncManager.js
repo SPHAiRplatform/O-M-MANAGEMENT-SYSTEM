@@ -33,22 +33,14 @@ class SyncManager {
   }
 
   async sync() {
-    if (this.isSyncing) {
-      console.log('Sync already in progress');
-      return;
-    }
-
-    if (!navigator.onLine) {
-      console.log('Device is offline, cannot sync');
-      return;
-    }
+    if (this.isSyncing) return;
+    if (!navigator.onLine) return;
 
     this.isSyncing = true;
     this.notifySyncStatus('syncing');
 
     try {
       const pendingItems = await offlineStorage.getSyncQueue('pending');
-      console.log(`Found ${pendingItems.length} pending sync items`);
 
       if (pendingItems.length === 0) {
         this.isSyncing = false;
@@ -95,7 +87,6 @@ class SyncManager {
         total: pendingItems.length
       });
 
-      console.log(`Sync completed: ${successCount} succeeded, ${failureCount} failed`);
     } catch (error) {
       console.error('Sync error:', error);
       this.notifySyncStatus('error', { error: error.message });
@@ -108,7 +99,6 @@ class SyncManager {
     const API_BASE_URL = getApiBaseUrl();
     const { type, method, url, data, headers } = item;
 
-    console.log(`Processing sync item: ${type} ${method} ${url}`);
 
     const config = {
       method: method.toLowerCase(),
@@ -143,7 +133,6 @@ class SyncManager {
 
     // Sync when connection is restored
     window.addEventListener('online', async () => {
-      console.log('Connection restored, starting sync...');
       await this.sync();
     });
   }

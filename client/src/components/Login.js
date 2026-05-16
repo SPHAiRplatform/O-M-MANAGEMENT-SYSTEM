@@ -173,7 +173,7 @@ function Login() {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
-    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (newPassword.length < 8) { setError('Password must be at least 8 characters'); return; }
     if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
@@ -208,8 +208,8 @@ function Login() {
   // --- Password strength (reused from PasswordChangeModal) ---
   const getStrength = (pw) => {
     let score = 0;
-    if (pw.length >= 6) score++;
     if (pw.length >= 8) score++;
+    if (pw.length >= 12) score++;
     if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
     if (/\d/.test(pw)) score++;
     if (/[^a-zA-Z\d]/.test(pw)) score++;
@@ -338,7 +338,7 @@ function Login() {
           <small style={{ color: '#e53935', marginTop: '4px', display: 'block' }}>Passwords do not match</small>
         )}
       </div>
-      <button type="submit" className="btn btn-primary btn-block" disabled={loading || newPassword.length < 6 || newPassword !== confirmPassword}>
+      <button type="submit" className="btn btn-primary btn-block" disabled={loading || newPassword.length < 8 || newPassword !== confirmPassword}>
         {loading ? <><span className="spinner"></span>Resetting...</> : 'Reset Password'}
       </button>
       <div style={{ textAlign: 'center', marginTop: '16px' }}>

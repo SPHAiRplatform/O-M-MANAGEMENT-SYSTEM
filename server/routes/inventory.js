@@ -18,8 +18,6 @@ module.exports = (pool) => {
   const router = express.Router();
   router.use(requireFeature(pool, 'inventory'));
   
-  console.log('[INVENTORY] Inventory routes module loaded');
-  console.log('[INVENTORY] Registering routes...');
 
   // Automatic Excel -> DB sync (safe, only runs when Excel file changes)
   // This makes "Sync from Excel" effectively automatic for all users.
@@ -181,17 +179,7 @@ module.exports = (pool) => {
 
   // Download inventory as Excel file (admin only) - uses existing template
   // IMPORTANT: This route must be defined BEFORE any catch-all routes
-  console.log('[INVENTORY] Registering GET /download route');
   router.get('/download', requireAdmin, async (req, res) => {
-    console.log('[INVENTORY] ========== DOWNLOAD REQUEST ==========');
-    console.log('[INVENTORY] Download request received from:', req.session?.username || 'unknown');
-    console.log('[INVENTORY] User ID:', req.session?.userId);
-    console.log('[INVENTORY] User role:', req.session?.role);
-    console.log('[INVENTORY] Request method:', req.method);
-    console.log('[INVENTORY] Request path:', req.path);
-    console.log('[INVENTORY] Request originalUrl:', req.originalUrl);
-    console.log('[INVENTORY] ======================================');
-    
     try {
       // Get organization slug for file storage
       const organizationSlug = await getOrganizationSlugFromRequest(req, pool);
@@ -199,9 +187,7 @@ module.exports = (pool) => {
         await ensureCompanyDirs(organizationSlug);
       }
 
-      console.log('[INVENTORY] Starting export to Excel...');
       const buffer = await exportInventoryToExcel(pool);
-      console.log('[INVENTORY] Excel export successful, buffer size:', buffer.length, 'bytes');
       
       // Save to company exports folder if organization context exists
       const filename = `Inventory_Count_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -209,7 +195,6 @@ module.exports = (pool) => {
         const exportsDir = getStoragePath(organizationSlug, 'exports');
         const exportPath = path.join(exportsDir, filename);
         fs.writeFileSync(exportPath, buffer);
-        console.log('[INVENTORY] Saved export to company folder:', exportPath);
       }
       
       // Set headers for file download
@@ -217,9 +202,7 @@ module.exports = (pool) => {
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Content-Length', buffer.length);
       
-      console.log('[INVENTORY] Sending file:', filename);
       res.send(buffer);
-      console.log('[INVENTORY] File sent successfully');
     } catch (e) {
       console.error('[INVENTORY] Error exporting inventory to Excel:', e);
       
@@ -680,7 +663,6 @@ module.exports = (pool) => {
     }
   });
 
-  console.log('[INVENTORY] All inventory routes registered');
   return router;
 };
 

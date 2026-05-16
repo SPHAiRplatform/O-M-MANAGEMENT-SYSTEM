@@ -45,10 +45,8 @@ function TaskDetail() {
         setLoading(false);
         return;
       }
-      console.log('Loading task with ID:', id);
       const response = await getTask(id);
       setTask(response.data);
-      console.log('Task loaded successfully:', response.data?.task_code);
       setLoading(false);
     } catch (error) {
       console.error('Error loading task:', error);

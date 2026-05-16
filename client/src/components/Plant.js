@@ -198,7 +198,6 @@ function Plant() {
       // Check if user has organization context
       if (isSystemOwnerWithoutCompany(user)) {
         // System owner without company: show empty map
-        console.log('[PLANT] System owner without company selected - showing empty map');
         setTrackers([]);
         setLoading(false);
         return;
@@ -221,7 +220,6 @@ function Plant() {
           if (result.structure.length > 0) {
             structure = result.structure;
             serverHasData = true;
-            console.log('[PLANT] Loaded structure from company folder:', structure.length, 'trackers');
             // Load custom labels if present
             if (result.labels) {
               setPlantLabels(prev => ({ ...prev, ...result.labels }));
@@ -234,20 +232,14 @@ function Plant() {
               }
             }
           } else {
-            // Server returned empty array - company has no map data
             serverHasData = false;
-            console.log('[PLANT] Company folder has no map structure - showing blank map');
           }
         }
       } catch (serverError) {
-        console.warn('[PLANT] Server load failed or timeout:', serverError.message);
         serverHasData = false;
       }
       
-      // NO localStorage fallback - ensures data isolation
-      // Each company must have its own map in company folder
       if (!structure || structure.length === 0) {
-        console.log('[PLANT] No map structure found in company folder - showing blank map');
         structure = [];
       }
       
@@ -267,24 +259,18 @@ function Plant() {
         
         setTrackers(fixed);
         
-        // If we have data but server doesn't, save to server immediately
-        // This ensures other devices can access it
         if (!serverHasData && fixed.length > 0) {
-          console.log('[PLANT] Server has no data, auto-syncing to server...');
           setSaving(true);
           try {
             await savePlantMapStructure(fixed);
-            console.log('[PLANT] ✓ Successfully auto-saved to company folder');
           } catch (err) {
-            console.error('[PLANT] ✗ Failed to auto-save to server:', err);
+            console.error('[PLANT] Failed to auto-save to server:', err);
             // Don't show error to user, just log it
           } finally {
             setSaving(false);
           }
         }
       } else {
-        // No map data - show blank map (company has no plant map)
-        console.log('[PLANT] No map structure found - showing blank map');
         setTrackers([]);
       }
     } catch (err) {
@@ -313,9 +299,7 @@ function Plant() {
     const isOnPlantPage = location.pathname === '/tenant/plant' || location.pathname === '/plant';
     
     if (isOnPlantPage) {
-      // Check if we just navigated to the Plant page (from another page)
       if (lastLocationRef.current !== null && lastLocationRef.current !== location.pathname && hasLoadedRef.current) {
-        console.log('[PLANT] Navigated back to Plant page - reloading map structure to check for updates');
         // Reset flag to allow reload
         hasLoadedRef.current = false;
         loadMapStructure(true);
@@ -330,9 +314,7 @@ function Plant() {
    * This allows Notifications page to trigger a reload
    */
   useEffect(() => {
-    const handleTrackerApproved = (event) => {
-      console.log('[PLANT] Tracker approval event received - reloading map structure', event.detail);
-      // Force reload immediately
+    const handleTrackerApproved = () => {
       hasLoadedRef.current = false; // Reset flag to allow reload
       loadMapStructure(true);
     };
@@ -342,10 +324,8 @@ function Plant() {
     
     // Also listen for window focus (user switches back to tab)
     const handleFocus = () => {
-      // Only reload if we're on Plant page and map has been loaded before
       const isOnPlantPage = location.pathname === '/tenant/plant' || location.pathname === '/plant';
       if (isOnPlantPage && hasLoadedRef.current) {
-        console.log('[PLANT] Window regained focus on Plant page - reloading map structure');
         loadMapStructure(true);
       }
     };
@@ -364,7 +344,6 @@ function Plant() {
    */
   useEffect(() => {
     if (hasLoadedRef.current) {
-      console.log('[PLANT] View mode changed - reloading map structure');
       loadMapStructure(true);
     }
   }, [viewMode, loadMapStructure]);
@@ -382,10 +361,8 @@ function Plant() {
       try {
         if (showSaving) setSaving(true);
         await savePlantMapStructure(structureToSave);
-        console.log('[PLANT] Structure saved to company folder successfully');
-        // NO localStorage - data must come from company folder only
       } catch (err) {
-        console.error('[PLANT] Error saving to company folder:', err);
+        console.error('Error saving plant map to company folder:', err);
         // Don't save to localStorage - ensures data isolation
       } finally {
         if (showSaving) setSaving(false);
@@ -442,10 +419,7 @@ function Plant() {
     }
 
     // Prevent duplicate submissions
-    if (submittingRequest) {
-      console.log('[PLANT] Submission already in progress, ignoring duplicate request');
-      return;
-    }
+    if (submittingRequest) return;
 
     setSubmittingRequest(true);
     try {
@@ -456,7 +430,6 @@ function Plant() {
         message: statusRequestForm.message || null
       });
       
-      console.log('[PLANT] Status request submitted successfully:', response.data);
       setAlertSuccess(`Status request submitted successfully! ${selectedTrackers.size} tracker(s) marked as ${statusRequestForm.status_type === 'done' ? 'done' : 'halfway'}. Waiting for admin approval.`);
       setShowStatusRequestModal(false);
       setSelectedTrackers(new Set());
@@ -566,10 +539,7 @@ function Plant() {
       onConfirm: async () => {
         setResettingCycle(true);
         try {
-          const result = await resetCycle(viewMode);
-          console.log('[PLANT] Cycle reset result:', result);
-
-          // Reset the loaded flag to force a fresh reload
+          await resetCycle(viewMode);
           hasLoadedRef.current = false;
 
           // Reload cycle info
@@ -580,25 +550,15 @@ function Plant() {
           // Use longer delay and add cache-busting to ensure fresh data
           setTimeout(async () => {
             try {
-              console.log('[PLANT] Reloading map structure after cycle reset...');
-              // Force reload by resetting flag and calling loadMapStructure
               hasLoadedRef.current = false;
-
-              // Add a small cache-busting delay and reload
               await new Promise(resolve => setTimeout(resolve, 300));
               await loadMapStructure(true);
-
-              // Verify the reload worked by checking tracker colors
-              console.log('[PLANT] Map structure reloaded after cycle reset');
-
-              // Double-check: reload again after another short delay to ensure consistency
               setTimeout(async () => {
                 hasLoadedRef.current = false;
                 await loadMapStructure(true);
-                console.log('[PLANT] Second reload completed for verification');
               }, 500);
             } catch (reloadError) {
-              console.error('[PLANT] Error reloading map after cycle reset:', reloadError);
+              console.error('Error reloading map after cycle reset:', reloadError);
             }
           }, 800);
 
