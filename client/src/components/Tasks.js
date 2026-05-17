@@ -674,20 +674,22 @@ function Tasks() {
                             {task.assigned_users && task.assigned_users.length > 0 ? (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {task.assigned_users.map((user, idx) => {
-                                  // Extract first name from full_name or use username
-                                  const displayName = user.full_name 
+                                  const displayName = user.full_name
                                     ? user.full_name.split(' ')[0]
                                     : (user.username ? user.username.split(' ')[0] : 'Unknown');
+                                  const isDeactivated = user.is_active === false;
                                   return (
-                                    <span 
-                                      key={user.id || idx} 
-                                      style={{ 
+                                    <span
+                                      key={user.id || idx}
+                                      title={isDeactivated ? `${displayName} (Deactivated)` : displayName}
+                                      style={{
                                         fontSize: '12px',
-                                        color: '#333',
-                                        whiteSpace: 'nowrap'
+                                        color: isDeactivated ? '#999' : '#333',
+                                        whiteSpace: 'nowrap',
+                                        fontStyle: isDeactivated ? 'italic' : 'normal'
                                       }}
                                     >
-                                      {displayName}
+                                      {displayName}{isDeactivated ? ' (Deactivated)' : ''}
                                       {idx < task.assigned_users.length - 1 && ','}
                                     </span>
                                   );

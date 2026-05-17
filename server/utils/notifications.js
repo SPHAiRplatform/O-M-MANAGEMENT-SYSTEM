@@ -250,6 +250,8 @@ async function getTaskDisplayName(pool, task) {
  * Sends email first (primary), then creates in-app notification (secondary)
  */
 async function notifyTaskAssigned(pool, task, assignedUser) {
+  // Don't notify deactivated users
+  if (assignedUser && assignedUser.is_active === false) return null;
   const taskDetails = {
     task_code: task.task_code,
     task_type: task.task_type,
@@ -305,6 +307,8 @@ async function notifyTaskAssigned(pool, task, assignedUser) {
  * Sends email first (primary), then creates in-app notification (secondary)
  */
 async function notifyTaskReminder(pool, task, assignedUser) {
+  // Don't notify deactivated users
+  if (assignedUser && assignedUser.is_active === false) return null;
   const taskDetails = {
     task_code: task.task_code,
     task_type: task.task_type,

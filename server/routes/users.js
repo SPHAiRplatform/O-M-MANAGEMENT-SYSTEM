@@ -8,6 +8,7 @@ const { requireAuth, requirePasswordChange, requireAdmin, requireSuperAdmin, isS
 const { validateCreateUser, validateUpdateUser } = require('../middleware/inputValidation');
 const { requireFeature } = require('../middleware/requireFeature');
 const { logAudit, AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } = require('../utils/auditLogger');
+const { deleteUserSession } = require('../utils/redis');
 // Rate limiting removed for frequent use
 // const { sensitiveOperationLimiter } = require('../middleware/rateLimiter');
 
@@ -864,6 +865,10 @@ module.exports = (pool) => {
         return res.status(404).json({ error: 'User not found' });
       }
       const target = result.rows[0];
+
+      // Immediately revoke their active session so they are kicked out within seconds
+      deleteUserSession(target.id).catch(() => {});
+
       logAudit(pool, req, { action: AUDIT_ACTIONS.USER_DEACTIVATED, entityType: AUDIT_ENTITY_TYPES.USER, entityId: target.id, details: { username: target.username } }).catch(() => {});
       res.json({ message: 'User deactivated successfully' });
     } catch (error) {

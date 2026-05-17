@@ -37,6 +37,7 @@ function UserManagement() {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [saving, setSaving] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [showInactiveUsers, setShowInactiveUsers] = useState(false);
   const usersPerPage = 10;
 
   useEffect(() => {
@@ -627,7 +628,7 @@ function UserManagement() {
       ) : (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ margin: 0 }}>All Users ({users.length})</h2>
+            <h2 style={{ margin: 0 }}>All Users ({users.filter(u => showInactiveUsers || u.is_active !== false).length})</h2>
             <button
               onClick={() => setShowRoleDescriptions(!showRoleDescriptions)}
               className="btn btn-sm btn-secondary"
@@ -718,19 +719,28 @@ function UserManagement() {
             </div>
           )}
           
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{ marginBottom: '12px', display: 'flex', gap: '10px', alignItems: 'center' }}>
             <input
               type="text"
               placeholder="Search by name, username, email, or role..."
               value={userSearchQuery}
               onChange={(e) => { setUserSearchQuery(e.target.value); setCurrentPage(1); }}
-              style={{ width: '100%', padding: '10px 12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '6px', boxSizing: 'border-box' }}
+              style={{ flex: 1, padding: '10px 12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '6px', boxSizing: 'border-box' }}
             />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={showInactiveUsers}
+                onChange={(e) => { setShowInactiveUsers(e.target.checked); setCurrentPage(1); }}
+              />
+              Show inactive
+            </label>
           </div>
           <div className="table-responsive">
             {(() => {
+              const visibleUsers = showInactiveUsers ? users : users.filter(u => u.is_active !== false);
               const filteredUsers = userSearchQuery.trim()
-                ? users.filter(u => {
+                ? visibleUsers.filter(u => {
                     const q = userSearchQuery.toLowerCase();
                     return (u.username || '').toLowerCase().includes(q) ||
                            (u.full_name || '').toLowerCase().includes(q) ||
@@ -738,7 +748,7 @@ function UserManagement() {
                            (u.roles || []).some(r => formatRoleName(r).toLowerCase().includes(q)) ||
                            (u.role || '').toLowerCase().includes(q);
                   })
-                : users;
+                : visibleUsers;
               const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
               const startIndex = (currentPage - 1) * usersPerPage;
               const endIndex = startIndex + usersPerPage;
