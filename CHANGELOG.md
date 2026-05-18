@@ -6,6 +6,34 @@ Format: `[YYYY-MM-DD] Category: Description`
 
 ---
 
+## [2026-05-18]
+
+### Offline Overhaul
+- **Service Worker** (`sphair-omv2`): Rewrote caching strategy — navigation requests are now network-first and cache the React app shell on first online visit so the full SPA loads offline; static assets (hashed JS/CSS bundles) are cache-first and cached automatically on first load
+- **ChecklistForm auto-save**: When offline, drafts now save directly to IndexedDB and show "Draft saved offline" instead of an error; when online but network drops mid-save, falls back to IndexedDB silently; IndexedDB draft is always mirrored on visibility change / page hide
+- **ChecklistForm offline submit**: Pressing Submit while offline queues the full checklist to IndexedDB and shows a "Submission pending" banner; on reconnect the submission fires automatically via an `online` event listener; if network drops right at submit time, the submission is queued the same way
+- **ChecklistForm draft restore**: `loadTaskAndDraft` now falls back to IndexedDB offline draft when the server draft endpoint is unreachable
+- **SyncManager fix — status code validation**: `processSyncItem` now uses `validateStatus: () => true` and throws on HTTP 4xx/5xx so failed requests retry or are marked failed (previously 400/422 responses were treated as success)
+- **SyncManager fix — listener leak**: `startAutoSync` now stores the `online` handler reference and removes any previously registered handler before re-adding — prevents duplicate listeners accumulating across logins
+- **SyncManager fix — nextRetry respected**: Items with a future `nextRetry` timestamp are now skipped during sync instead of being retried immediately
+- **SyncManager fix — stopAutoSync cleanup**: Now also removes the online event listener, not just the interval
+- **OfflineIndicator re-enabled**: Fixed the checkmark flicker by holding the `completed` state for the full 3 seconds before resetting to `idle`, preventing the component from returning `null` before the timeout fires; re-added `<OfflineIndicator />` to App.js
+- **Pre-load on login**: On login (when online), assigned tasks (pending/in_progress) and all checklist templates are fetched and stored in IndexedDB so the technician's full workload is available offline from the very first visit
+- **offlineStorage**: Added `saveOfflineDraft`, `getOfflineDraft`, `removeOfflineDraft`, `savePendingSubmission`, `getPendingSubmission`, `getAllPendingSubmissions`, `removePendingSubmission` methods to support the new offline draft and queued submission flows
+- Removed leftover `console.log` statements from `offlineStorage.js` and `offlineApi.js`
+
+### User Deactivation Improvements
+- Deactivating a user now immediately revokes their active Redis session — they are kicked out within ~5 seconds instead of waiting for their JWT to expire
+- Notification functions (`notifyTaskAssigned`, `notifyTaskReminder`) now guard against sending notifications to deactivated users
+- Tasks list now shows deactivated assignees in gray italic with a "(Deactivated)" label instead of displaying their name normally
+- User Management now has a "Show inactive" checkbox — deactivated users are hidden by default and shown on demand
+
+### Debug Cleanup
+- Removed all `console.log` debug statements from client and server (kept `console.error` / `console.warn`)
+- Files cleaned: `api.js`, `Plant.js`, `useInactivityTimeout.js`, `syncManager.js`, `ChecklistForm.js`, `ChecklistTemplates.js`, `Tasks.js`, `Inspection.js`, `TaskDetail.js`, `server/routes/inventory.js`, `server/routes/auth.js`, `offlineStorage.js`, `offlineApi.js`
+
+---
+
 ## [2026-05-16]
 
 ### Security
