@@ -36,16 +36,22 @@ function OfflineIndicator() {
     const interval = setInterval(checkPending, 30000); // 30s instead of 5s
 
     // Listen to sync status
+    // Hold 'completed' state visible for 3s before resetting to 'idle'
+    // to prevent the checkmark flickering away immediately.
     const unsubscribe = syncManager.onSyncStatusChange((status, data) => {
-      setSyncStatus(status);
       if (status === 'completed') {
+        setSyncStatus('completed');
         setSyncProgress(data);
+        checkPending();
         setTimeout(() => {
           setSyncProgress(null);
+          setSyncStatus('idle');
         }, 3000);
-        checkPending();
       } else if (status === 'syncing') {
-        setSyncProgress({ message: 'Syncing...' });
+        setSyncStatus('syncing');
+        setSyncProgress(null);
+      } else {
+        setSyncStatus(status);
       }
     });
 

@@ -16,13 +16,11 @@ class OfflineApi {
 
   setupOnlineListeners() {
     window.addEventListener('online', () => {
-      console.log('Device came online');
       this.isOnline = true;
       syncManager.sync();
     });
 
     window.addEventListener('offline', () => {
-      console.log('Device went offline');
       this.isOnline = false;
     });
   }
@@ -43,7 +41,6 @@ class OfflineApi {
       } catch (error) {
         // If request fails and it's a network error, queue it
         if (!error.response && error.message.includes('Network Error')) {
-          console.log('Network error, queueing request for offline sync');
           return this.queueRequest(config);
         }
         throw error;

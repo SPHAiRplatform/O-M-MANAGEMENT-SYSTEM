@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getApiBaseUrl, authFetch } from './api/api';
+import { getApiBaseUrl, authFetch, getUnreadNotificationCount, getCurrentOrganizationBranding, getTasks, getChecklistTemplates } from './api/api';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { getUnreadNotificationCount, getCurrentOrganizationBranding } from './api/api';
 import Dashboard from './components/Dashboard';
 import Tasks from './components/Tasks';
 import Inspection from './components/Inspection';
@@ -33,8 +32,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import PasswordChangeModal from './components/PasswordChangeModal';
 // LicenseStatus removed - no longer needed
 // import LicenseStatus from './components/LicenseStatus';
-// OfflineIndicator removed - caused visual glitch (checkmark flicker)
-// import OfflineIndicator from './components/OfflineIndicator';
+import OfflineIndicator from './components/OfflineIndicator';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import FeedbackWidget from './components/FeedbackWidget';
 import InstallPrompt from './components/InstallPrompt';
@@ -43,6 +41,7 @@ import { usePageTitle } from './hooks/usePageTitle';
 import { OrganizationFeaturesProvider, useOrganizationFeatures } from './context/OrganizationFeaturesContext';
 import FeatureGate from './components/FeatureGate';
 import syncManager from './utils/syncManager';
+import offlineStorage from './utils/offlineStorage';
 import { loadAndApplyCompanyColors, resetCompanyColors } from './utils/companyColors';
 import './App.css';
 
@@ -120,11 +119,39 @@ function AppContent() {
     if (user) {
       // Start auto-sync every 30 seconds
       syncManager.startAutoSync(30000);
-      
+
       return () => {
         syncManager.stopAutoSync();
       };
     }
+  }, [user]);
+
+  // Pre-load assigned tasks and checklist templates into IndexedDB so technicians
+  // have their workload available offline after the first online visit.
+  useEffect(() => {
+    if (!user || !navigator.onLine) return;
+
+    const preloadOfflineData = async () => {
+      try {
+        const [tasksRes, templatesRes] = await Promise.all([
+          getTasks({ assigned_to_me: true, status: 'pending,in_progress' }),
+          getChecklistTemplates()
+        ]);
+
+        const tasks = tasksRes?.data?.tasks || tasksRes?.data || [];
+        const templates = templatesRes?.data || [];
+
+        // Cache tasks individually by id
+        await Promise.all(tasks.map(t => offlineStorage.saveTask(t).catch(() => {})));
+
+        // Cache the full templates list under a single key
+        await offlineStorage.setCache('checklist_templates', templates).catch(() => {});
+      } catch (_) {
+        // Silently ignore — pre-load is best-effort
+      }
+    };
+
+    preloadOfflineData();
   }, [user]);
 
   // Load and apply company colors when user logs in or organization changes
@@ -184,7 +211,7 @@ function AppContent() {
 
   return (
     <>
-      {/* OfflineIndicator removed - caused visual glitch */}
+      <OfflineIndicator />
       {!showPasswordModal && <Header />}
       {/* LicenseStatus removed - no longer needed */}
       {/* {!showPasswordModal && <LicenseStatus />} */}

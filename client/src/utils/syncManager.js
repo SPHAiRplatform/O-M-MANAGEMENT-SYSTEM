@@ -13,6 +13,8 @@ class SyncManager {
     this.syncListeners = [];
     this.maxRetries = 3;
     this.retryDelay = 5000; // 5 seconds
+    this.syncInterval = null;
+    this._onlineHandler = null; // stored so we can remove it on stopAutoSync
   }
 
   onSyncStatusChange(callback) {
@@ -52,18 +54,21 @@ class SyncManager {
       let failureCount = 0;
 
       for (const item of pendingItems) {
+        // Skip items that are scheduled for a future retry
+        if (item.nextRetry && item.nextRetry > Date.now()) {
+          continue;
+        }
+
         try {
           await this.processSyncItem(item);
           await offlineStorage.removeFromSyncQueue(item.id);
           successCount++;
         } catch (error) {
           console.error('Error processing sync item:', error);
-          
-          // Update retry count
+
           const retryCount = (item.retryCount || 0) + 1;
-          
+
           if (retryCount >= this.maxRetries) {
-            // Mark as failed after max retries
             await offlineStorage.updateSyncQueueItem(item.id, {
               status: 'failed',
               retryCount,
@@ -71,7 +76,6 @@ class SyncManager {
             });
             failureCount++;
           } else {
-            // Retry later
             await offlineStorage.updateSyncQueueItem(item.id, {
               retryCount,
               lastError: error.message,
@@ -97,8 +101,7 @@ class SyncManager {
 
   async processSyncItem(item) {
     const API_BASE_URL = getApiBaseUrl();
-    const { type, method, url, data, headers } = item;
-
+    const { method, url, data, headers } = item;
 
     const config = {
       method: method.toLowerCase(),
@@ -107,7 +110,9 @@ class SyncManager {
         'Content-Type': 'application/json',
         ...headers
       },
-      withCredentials: true
+      withCredentials: true,
+      // Don't let axios throw only on 2xx — we validate manually below
+      validateStatus: () => true
     };
 
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -115,32 +120,54 @@ class SyncManager {
     }
 
     const response = await axios(config);
+
+    // Treat 4xx/5xx as errors so the item is retried or marked failed
+    if (response.status >= 400) {
+      const message = response.data?.error || response.data?.message || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
     return response.data;
   }
 
   async startAutoSync(interval = 30000) {
+    // Remove any previously registered online handler to prevent accumulation
+    if (this._onlineHandler) {
+      window.removeEventListener('online', this._onlineHandler);
+    }
+
+    this._onlineHandler = async () => {
+      await this.sync();
+    };
+
+    // Sync when connection is restored
+    window.addEventListener('online', this._onlineHandler);
+
     // Sync immediately if online
     if (navigator.onLine) {
       await this.sync();
     }
 
-    // Set up periodic sync
+    // Clear any existing interval before setting a new one
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
+
     this.syncInterval = setInterval(async () => {
       if (navigator.onLine && !this.isSyncing) {
         await this.sync();
       }
     }, interval);
-
-    // Sync when connection is restored
-    window.addEventListener('online', async () => {
-      await this.sync();
-    });
   }
 
   stopAutoSync() {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
+    }
+    if (this._onlineHandler) {
+      window.removeEventListener('online', this._onlineHandler);
+      this._onlineHandler = null;
     }
   }
 }

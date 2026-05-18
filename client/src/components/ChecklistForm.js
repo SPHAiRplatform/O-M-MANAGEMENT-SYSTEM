@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getTask, submitChecklistResponse, saveDraftResponse, getDraftResponse, deleteDraftResponse, getInventoryItems, authFetch } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { ErrorAlert, SuccessAlert } from './ErrorAlert';
+import offlineStorage from '../utils/offlineStorage';
 
 function ChecklistForm() {
   const { id } = useParams();
@@ -28,7 +29,8 @@ function ChecklistForm() {
   const [showSpareSelection, setShowSpareSelection] = useState(false);
   const [hoursWorked, setHoursWorked] = useState('');
   const { isTechnician, user } = useAuth();
-  const [autoSaveStatus, setAutoSaveStatus] = useState(''); // 'saving', 'saved', 'error'
+  const [autoSaveStatus, setAutoSaveStatus] = useState(''); // 'saving', 'saved', 'saved-offline', 'error'
+  const [pendingSubmission, setPendingSubmission] = useState(false); // true when a full submission is queued offline
   const [alertError, setAlertError] = useState(null);
   const [alertSuccess, setAlertSuccess] = useState(null);
   const autoSaveTimeoutRef = useRef(null);
@@ -81,6 +83,35 @@ function ChecklistForm() {
       // sessionStorage may be full or unavailable; ignore
     }
   }, [sessionKey]);
+
+  // Auto-submit pending offline submissions when device comes back online
+  useEffect(() => {
+    const handleOnline = async () => {
+      try {
+        const pending = await offlineStorage.getPendingSubmission(id);
+        if (!pending) return;
+
+        const response = await submitChecklistResponse(pending.submitData);
+        if (response.data.validation) {
+          // Clean up on success
+          offlineStorage.removePendingSubmission(id).catch(() => {});
+          offlineStorage.removeOfflineDraft(id).catch(() => {});
+          try { await deleteDraftResponse(id); } catch (_) {}
+          setPendingSubmission(false);
+          const overallStatus = response.data.validation.overallStatus.toUpperCase();
+          setAlertSuccess({
+            message: `Checklist submitted successfully! Overall Status: ${overallStatus}. You can now download the PDF report from the Task Details page.`,
+            onClose: () => navigate(`/tasks/${id}`)
+          });
+        }
+      } catch (_) {
+        // Will retry on next online event or manual re-submit
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [id]);
 
   useEffect(() => {
     loadTaskAndDraft();
@@ -138,7 +169,7 @@ function ChecklistForm() {
     };
   }, [sparesSearchQuery]);
 
-  // Auto-save function
+  // Auto-save function — saves to server when online, IndexedDB when offline
   const handleAutoSave = useCallback(async () => {
     if (!task || !task.checklist_template_id) return;
 
@@ -146,26 +177,53 @@ function ChecklistForm() {
     const currentState = JSON.stringify({ formData, metadata, images: itemImages, sparesUsed, hoursWorked });
     if (currentState === lastSavedRef.current) return;
 
+    const draftPayload = {
+      task_id: id,
+      checklist_template_id: task.checklist_template_id || task.id,
+      response_data: formData,
+      maintenance_team: metadata.maintenance_team,
+      inspected_by: metadata.inspected_by,
+      approved_by: metadata.approved_by,
+      images: itemImages,
+      spares_used: sparesUsed,
+      hours_worked: hoursWorked
+    };
+
+    // When offline, save straight to IndexedDB — no network call needed
+    if (!navigator.onLine) {
+      try {
+        await offlineStorage.saveOfflineDraft(id, draftPayload);
+        lastSavedRef.current = currentState;
+        setAutoSaveStatus('saved-offline');
+        setTimeout(() => setAutoSaveStatus(''), 3000);
+      } catch (err) {
+        console.error('Auto-save (offline) error:', err);
+        setAutoSaveStatus('error');
+        setTimeout(() => setAutoSaveStatus(''), 3000);
+      }
+      return;
+    }
+
     try {
       setAutoSaveStatus('saving');
-      await saveDraftResponse({
-        task_id: id,
-        checklist_template_id: task.checklist_template_id || task.id,
-        response_data: formData,
-        maintenance_team: metadata.maintenance_team,
-        inspected_by: metadata.inspected_by,
-        approved_by: metadata.approved_by,
-        images: itemImages,
-        spares_used: sparesUsed,
-        hours_worked: hoursWorked
-      });
+      await saveDraftResponse(draftPayload);
+      // Also mirror to IndexedDB so the draft survives if connectivity drops mid-session
+      offlineStorage.saveOfflineDraft(id, draftPayload).catch(() => {});
       lastSavedRef.current = currentState;
       setAutoSaveStatus('saved');
-      setTimeout(() => setAutoSaveStatus(''), 2000); // Clear status after 2 seconds
+      setTimeout(() => setAutoSaveStatus(''), 2000);
     } catch (error) {
-      console.error('Auto-save error:', error);
-      setAutoSaveStatus('error');
-      setTimeout(() => setAutoSaveStatus(''), 3000);
+      // Network failed mid-save — fall back to IndexedDB silently
+      try {
+        await offlineStorage.saveOfflineDraft(id, draftPayload);
+        lastSavedRef.current = currentState;
+        setAutoSaveStatus('saved-offline');
+        setTimeout(() => setAutoSaveStatus(''), 3000);
+      } catch (err) {
+        console.error('Auto-save error:', err);
+        setAutoSaveStatus('error');
+        setTimeout(() => setAutoSaveStatus(''), 3000);
+      }
     }
   }, [formData, metadata, itemImages, sparesUsed, task, id]);
 
@@ -180,18 +238,25 @@ function ChecklistForm() {
     const spares = sparesUsedRef.current;
     const hours = hoursWorkedRef.current;
 
+    const draftPayload = {
+      task_id: id,
+      checklist_template_id: t.checklist_template_id || t.id,
+      response_data: fd,
+      maintenance_team: md.maintenance_team,
+      inspected_by: md.inspected_by,
+      approved_by: md.approved_by,
+      images: imgs,
+      spares_used: spares,
+      hours_worked: hours
+    };
+
+    // Always mirror to IndexedDB (survives page kill regardless of connectivity)
+    offlineStorage.saveOfflineDraft(id, draftPayload).catch(() => {});
+
+    if (!navigator.onLine) return;
+
     try {
-      await saveDraftResponse({
-        task_id: id,
-        checklist_template_id: t.checklist_template_id || t.id,
-        response_data: fd,
-        maintenance_team: md.maintenance_team,
-        inspected_by: md.inspected_by,
-        approved_by: md.approved_by,
-        images: imgs,
-        spares_used: spares,
-        hours_worked: hours
-      });
+      await saveDraftResponse(draftPayload);
     } catch (error) {
       console.error('Auto-save (ref) error:', error);
     }
@@ -236,6 +301,16 @@ function ChecklistForm() {
 
   const loadTaskAndDraft = async () => {
     try {
+      // Check if there's an already-queued offline submission for this task
+      let hasPending = false;
+      try {
+        const pending = await offlineStorage.getPendingSubmission(id);
+        if (pending) {
+          hasPending = true;
+          setPendingSubmission(true);
+        }
+      } catch (_) { /* ignore */ }
+
       const response = await getTask(id);
       setTask(response.data);
       
@@ -279,11 +354,18 @@ function ChecklistForm() {
           }
         } catch (e) { /* ignore parse errors */ }
 
-        // Load server draft, merge with initial structure
+        // Load server draft; if offline/fails, fall back to IndexedDB offline draft
         let draft = null;
         try {
           draft = await getDraftResponse(id);
         } catch (e) {
+          // Server unreachable — try IndexedDB offline draft
+          try {
+            const offlineDraft = await offlineStorage.getOfflineDraft(id);
+            if (offlineDraft) {
+              draft = offlineDraft;
+            }
+          } catch (_) { /* ignore */ }
         }
 
         // Choose the most recent data source: sessionStorage backup vs server draft
@@ -418,6 +500,30 @@ function ChecklistForm() {
     }
   };
 
+  // Build the submit payload — shared by online submit and offline queue
+  const buildSubmitData = (imageUploads) => {
+    const submitData = {
+      task_id: id,
+      checklist_template_id: task.checklist_template_id || task.id,
+      response_data: formData,
+      submitted_by: task.assigned_to || null,
+      maintenance_team: metadata.maintenance_team,
+      inspected_by: metadata.inspected_by,
+      approved_by: metadata.approved_by,
+      images: imageUploads,
+      spares_used: sparesUsed
+    };
+    if (task.task_type === 'UCM') {
+      if (cmOccurredAt) submitData.cm_occurred_at = cmOccurredAt;
+      if (cmStartedAt) submitData.started_at = cmStartedAt;
+      if (cmCompletedAt) submitData.completed_at = cmCompletedAt;
+    }
+    if (hoursWorked && parseFloat(hoursWorked) > 0) {
+      submitData.hours_worked = parseFloat(hoursWorked);
+    }
+    return submitData;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -437,11 +543,54 @@ function ChecklistForm() {
       return;
     }
 
+    // ── Offline path ────────────────────────────────────────────────────────────
+    if (!navigator.onLine) {
+      try {
+        // Collect already-uploaded images (un-uploaded file objects can't be serialised)
+        const imageUploads = Object.entries(itemImages)
+          .filter(([, v]) => v?.uploaded?.image_path)
+          .map(([key, v]) => ({
+            ...v.uploaded,
+            sectionId: key.split('_')[0],
+            itemId: key.split('_')[1],
+            comment: v.comment || ''
+          }));
+
+        const submitData = buildSubmitData(imageUploads);
+
+        // Save full submission to IndexedDB — syncManager will replay it when online
+        await offlineStorage.savePendingSubmission(id, submitData);
+        // Keep the draft in IndexedDB too (so data survives until submission syncs)
+        await offlineStorage.saveOfflineDraft(id, {
+          task_id: id,
+          checklist_template_id: task.checklist_template_id || task.id,
+          response_data: formData,
+          maintenance_team: metadata.maintenance_team,
+          inspected_by: metadata.inspected_by,
+          approved_by: metadata.approved_by,
+          images: itemImages,
+          spares_used: sparesUsed,
+          hours_worked: hoursWorked
+        });
+
+        setPendingSubmission(true);
+        setAlertSuccess({
+          message: 'You\'re offline — your checklist has been saved and will be submitted automatically when your connection is restored.',
+        });
+      } catch (err) {
+        console.error('Error queueing offline submission:', err);
+        setAlertError({ message: 'Could not save checklist offline. Please try again.' });
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ── Online path ─────────────────────────────────────────────────────────────
     try {
       // Upload any pending images (we also upload immediately on selection; this is a safety net)
       const imageUploads = [];
       for (const [key, imageData] of Object.entries(itemImages)) {
-        // Already uploaded
         if (imageData?.uploaded?.image_path) {
           imageUploads.push({
             ...imageData.uploaded,
@@ -451,8 +600,6 @@ function ChecklistForm() {
           });
           continue;
         }
-
-        // Needs upload
         if (imageData?.file) {
           const [sectionId, itemId] = key.split('_');
           const uploadResult = await handleImageUpload(sectionId, itemId, imageData.file, imageData.comment);
@@ -462,36 +609,10 @@ function ChecklistForm() {
         }
       }
 
-
-      // For UCM tasks, include time fields
-      const submitData = {
-        task_id: id,
-        checklist_template_id: task.checklist_template_id || task.id,
-        response_data: formData,
-        submitted_by: task.assigned_to || null,
-        maintenance_team: metadata.maintenance_team,
-        inspected_by: metadata.inspected_by,
-        approved_by: metadata.approved_by,
-        images: imageUploads,
-        spares_used: sparesUsed // Only spares that were selected to use
-      };
-
-      // Add UCM time fields if task type is UCM
-      if (task.task_type === 'UCM') {
-        if (cmOccurredAt) submitData.cm_occurred_at = cmOccurredAt;
-        if (cmStartedAt) submitData.started_at = cmStartedAt;
-        if (cmCompletedAt) submitData.completed_at = cmCompletedAt;
-      }
-      
-      // Add hours worked if provided
-      if (hoursWorked && parseFloat(hoursWorked) > 0) {
-        submitData.hours_worked = parseFloat(hoursWorked);
-      }
-
+      const submitData = buildSubmitData(imageUploads);
       const response = await submitChecklistResponse(submitData);
 
       if (response.data.validation && !response.data.validation.isValid) {
-        // Show validation errors
         const validationErrors = {};
         response.data.validation.errors.forEach((error) => {
           validationErrors[error.itemId] = error.error;
@@ -499,13 +620,11 @@ function ChecklistForm() {
         setErrors(validationErrors);
         setAlertError({ message: 'Validation failed. Please check the form and fix errors.' });
       } else {
-        // Delete draft after successful submission
-        try {
-          await deleteDraftResponse(id);
-        } catch (error) {
-          console.error('Error deleting draft:', error);
-        }
-        
+        // Clean up drafts on successful submission
+        try { await deleteDraftResponse(id); } catch (_) {}
+        offlineStorage.removeOfflineDraft(id).catch(() => {});
+        offlineStorage.removePendingSubmission(id).catch(() => {});
+
         const overallStatus = response.data.validation.overallStatus.toUpperCase();
         setAlertSuccess({
           message: `Checklist submitted successfully! Overall Status: ${overallStatus}. You can now download the PDF report from the Task Details page.`,
@@ -514,10 +633,33 @@ function ChecklistForm() {
       }
     } catch (error) {
       console.error('Error submitting checklist:', error);
-      console.error('Error response:', error.response);
-      
+
+      // If network dropped at submit time, queue it
+      if (!error.response) {
+        try {
+          const imageUploads = Object.entries(itemImages)
+            .filter(([, v]) => v?.uploaded?.image_path)
+            .map(([key, v]) => ({
+              ...v.uploaded,
+              sectionId: key.split('_')[0],
+              itemId: key.split('_')[1],
+              comment: v.comment || ''
+            }));
+          await offlineStorage.savePendingSubmission(id, buildSubmitData(imageUploads));
+          setPendingSubmission(true);
+          setAlertSuccess({
+            message: 'Connection lost — your checklist has been saved and will be submitted automatically when your connection is restored.',
+          });
+        } catch (queueErr) {
+          console.error('Error queueing submission after network failure:', queueErr);
+          setAlertError({
+            message: 'Failed to submit checklist and could not save offline. Please try again.',
+          });
+        }
+        return;
+      }
+
       if (error.response && error.response.data) {
-        // Handle validation errors
         if (error.response.data.details && Array.isArray(error.response.data.details)) {
           const validationErrors = {};
           error.response.data.details.forEach((err) => {
@@ -526,12 +668,10 @@ function ChecklistForm() {
           setErrors(validationErrors);
           setAlertError({ message: 'Validation failed. Please check the highlighted items.' });
         } else {
-          // Handle other errors
           const errorMessage = error.response.data.error || error.response.data.details || 'Failed to submit checklist';
           setAlertError({ message: errorMessage, details: error.response.data });
         }
       } else {
-        // Network or other errors
         setAlertError({
           message: 'Failed to submit checklist',
           details: error.message || 'Network error. Please check your connection.'
@@ -849,22 +989,42 @@ function ChecklistForm() {
       <div className="card">
         <h2>{task.template_name || 'Checklist'}</h2>
         
-        {/* Auto-save status indicator */}
-        {autoSaveStatus && (
-          <div style={{ 
-            marginBottom: '15px', 
-            padding: '8px 15px', 
+        {/* Pending offline submission banner */}
+        {pendingSubmission && (
+          <div style={{
+            marginBottom: '15px',
+            padding: '10px 15px',
             borderRadius: '4px',
             fontSize: '14px',
-            background: autoSaveStatus === 'saving' ? '#fff3cd' : 
-                        autoSaveStatus === 'saved' ? '#d4edda' : '#f8d7da',
-            color: autoSaveStatus === 'saving' ? '#856404' : 
-                   autoSaveStatus === 'saved' ? '#155724' : '#721c24',
-            border: `1px solid ${autoSaveStatus === 'saving' ? '#ffc107' : 
-                                autoSaveStatus === 'saved' ? '#28a745' : '#dc3545'}`
+            background: '#fff3cd',
+            color: '#856404',
+            border: '1px solid #ffc107',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>&#8987;</span>
+            <span><strong>Submission pending</strong> — this checklist will be submitted automatically when your device reconnects.</span>
+          </div>
+        )}
+
+        {/* Auto-save status indicator */}
+        {autoSaveStatus && (
+          <div style={{
+            marginBottom: '15px',
+            padding: '8px 15px',
+            borderRadius: '4px',
+            fontSize: '14px',
+            background: autoSaveStatus === 'saving' ? '#fff3cd' :
+                        (autoSaveStatus === 'saved' || autoSaveStatus === 'saved-offline') ? '#d4edda' : '#f8d7da',
+            color: autoSaveStatus === 'saving' ? '#856404' :
+                   (autoSaveStatus === 'saved' || autoSaveStatus === 'saved-offline') ? '#155724' : '#721c24',
+            border: `1px solid ${autoSaveStatus === 'saving' ? '#ffc107' :
+                                (autoSaveStatus === 'saved' || autoSaveStatus === 'saved-offline') ? '#28a745' : '#dc3545'}`
           }}>
             {autoSaveStatus === 'saving' && 'Saving draft...'}
             {autoSaveStatus === 'saved' && 'Draft saved'}
+            {autoSaveStatus === 'saved-offline' && 'Draft saved offline'}
             {autoSaveStatus === 'error' && 'Error saving draft'}
           </div>
         )}

@@ -33,7 +33,6 @@ class OfflineStorage {
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('IndexedDB opened successfully');
         resolve(this.db);
       };
 
@@ -80,10 +79,7 @@ class OfflineStorage {
 
     return new Promise((resolve, reject) => {
       const request = store.add(queueItem);
-      request.onsuccess = () => {
-        console.log('Added to sync queue:', queueItem);
-        resolve(request.result);
-      };
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
@@ -200,6 +196,88 @@ class OfflineStorage {
     return new Promise((resolve, reject) => {
       const request = store.get(id);
       request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Offline draft — keyed by task_id (string), stored in checklistResponses store
+  async saveOfflineDraft(taskId, draftData) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readwrite');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.put({ id: `draft_${taskId}`, taskId, ...draftData, savedAt: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getOfflineDraft(taskId) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readonly');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.get(`draft_${taskId}`);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async removeOfflineDraft(taskId) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readwrite');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.delete(`draft_${taskId}`);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Pending full submissions — keyed by task_id, stored in checklistResponses store
+  async savePendingSubmission(taskId, submitData) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readwrite');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.put({ id: `submit_${taskId}`, taskId, submitData, queuedAt: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getPendingSubmission(taskId) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readonly');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.get(`submit_${taskId}`);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getAllPendingSubmissions() {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readonly');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const all = request.result || [];
+        resolve(all.filter(r => r.id && r.id.startsWith('submit_')));
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async removePendingSubmission(taskId) {
+    await this.init();
+    const transaction = this.db.transaction([STORES.CHECKLIST_RESPONSES], 'readwrite');
+    const store = transaction.objectStore(STORES.CHECKLIST_RESPONSES);
+    return new Promise((resolve, reject) => {
+      const request = store.delete(`submit_${taskId}`);
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }
