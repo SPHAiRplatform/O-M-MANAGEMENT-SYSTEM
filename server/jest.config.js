@@ -11,7 +11,14 @@ module.exports = {
     '**/__tests__/**/*.js',
     '**/?(*.)+(spec|test).js'
   ],
-  
+
+  // Don't treat support files under __tests__ (e.g. setup.js) as test suites.
+  // setup.js is loaded via setupFilesAfterEach below, not run as a suite.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/__tests__/setup.js'
+  ],
+
   // Coverage configuration
   collectCoverage: false, // Set to true when running coverage
   coverageDirectory: 'coverage',
