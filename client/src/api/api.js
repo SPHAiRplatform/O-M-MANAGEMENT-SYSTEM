@@ -103,6 +103,15 @@ export function setAuthToken(token) {
   }
 }
 
+// Accessor for the current JWT — used by the offline layer (offlineApi/syncManager)
+// so that requests replayed outside the `api` axios instance still carry the
+// Authorization header. Without this, queued offline writes fail with 401 on
+// any deployment that doesn't rely purely on session cookies.
+export function getAuthToken() {
+  if (authToken) return authToken;
+  try { return sessionStorage.getItem('authToken'); } catch (e) { return null; }
+}
+
 // Restore token on load (so refresh keeps user logged in)
 try {
   const stored = sessionStorage.getItem('authToken');

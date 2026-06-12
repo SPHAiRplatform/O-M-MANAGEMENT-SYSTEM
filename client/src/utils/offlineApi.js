@@ -6,7 +6,7 @@
 import axios from 'axios';
 import offlineStorage from './offlineStorage';
 import syncManager from './syncManager';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, getAuthToken } from '../api/api';
 
 class OfflineApi {
   constructor() {
@@ -25,6 +25,17 @@ class OfflineApi {
     });
   }
 
+  // Treat anything that smells like a connectivity failure as offline-queueable.
+  // Mirrors the detection used by makeOfflineAware in api.js so both paths agree.
+  isNetworkError(error) {
+    return !error.response && (
+      !navigator.onLine ||
+      error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNABORTED' ||
+      (error.message && error.message.includes('Network Error'))
+    );
+  }
+
   async request(config) {
     const { method, url, data, headers = {} } = config;
 
@@ -32,15 +43,20 @@ class OfflineApi {
     if (this.isOnline && navigator.onLine) {
       try {
         const API_BASE_URL = getApiBaseUrl();
+        const token = getAuthToken();
         const response = await axios({
           ...config,
           url: `${API_BASE_URL}${url}`,
+          headers: {
+            ...(config.headers || {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
           withCredentials: true
         });
         return response;
       } catch (error) {
-        // If request fails and it's a network error, queue it
-        if (!error.response && error.message.includes('Network Error')) {
+        // If request fails and it looks like a connectivity problem, queue it
+        if (this.isNetworkError(error)) {
           return this.queueRequest(config);
         }
         throw error;

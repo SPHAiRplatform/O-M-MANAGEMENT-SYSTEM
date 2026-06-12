@@ -5,7 +5,7 @@
 
 import offlineStorage from './offlineStorage';
 import axios from 'axios';
-import { getApiBaseUrl } from '../api/api';
+import { getApiBaseUrl, getAuthToken } from '../api/api';
 
 class SyncManager {
   constructor() {
@@ -103,12 +103,21 @@ class SyncManager {
     const API_BASE_URL = getApiBaseUrl();
     const { method, url, data, headers } = item;
 
+    // Attach the current JWT so replayed writes are authenticated even when the
+    // session cookie isn't sent (cross-origin port-forwarding, expiry, SameSite).
+    const token = getAuthToken();
+
+    // Drop any Authorization captured at queue time — it may be stale. The fresh
+    // token below is authoritative.
+    const { Authorization, authorization, ...safeHeaders } = headers || {};
+
     const config = {
       method: method.toLowerCase(),
       url: `${API_BASE_URL}${url}`,
       headers: {
         'Content-Type': 'application/json',
-        ...headers
+        ...safeHeaders,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       withCredentials: true,
       // Don't let axios throw only on 2xx — we validate manually below

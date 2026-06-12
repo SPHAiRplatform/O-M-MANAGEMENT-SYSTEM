@@ -1,7 +1,7 @@
 /* SPHAiRDigital Service Worker — PWA caching */
 
 // Bump this version whenever you deploy to force a cache refresh on all clients.
-const CACHE_NAME = 'sphair-omv2';
+const CACHE_NAME = 'sphair-omv3';
 const OFFLINE_URL = '/offline.html';
 
 // Files we can name exactly at build time.

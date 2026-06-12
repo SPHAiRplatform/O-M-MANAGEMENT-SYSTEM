@@ -112,16 +112,19 @@ module.exports = (pool) => {
               break;
 
             case 'checklist_submit':
-              // Handle checklist response submission
-              if (data) {
-                // This would need to integrate with the checklist response route logic
-                // For now, we'll return a success indicator
-                result = { synced: true, type: 'checklist_submit' };
-              }
-              break;
+              // Checklist submissions are NOT processed here. The client's
+              // syncManager replays them against the real POST /checklist-responses
+              // endpoint (which runs validation, image linking, inventory deduction,
+              // PDF generation, etc.). Faking success here would silently drop the
+              // technician's work, so fail loudly instead.
+              throw new Error(
+                'checklist_submit must be replayed against /checklist-responses, not the bulk /sync endpoint'
+              );
 
             default:
-              result = { synced: true, type: 'unknown', message: 'Operation type not specifically handled' };
+              // Unknown operation types must not report success — that would let the
+              // client delete a queued item that was never actually applied.
+              throw new Error(`Unsupported sync operation type: ${type}`);
           }
 
           results.push({

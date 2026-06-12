@@ -92,18 +92,30 @@ function ChecklistForm() {
         if (!pending) return;
 
         const response = await submitChecklistResponse(pending.submitData);
-        if (response.data.validation) {
-          // Clean up on success
+
+        // If the request was re-queued offline (connection dropped again), the
+        // mock response has { queued: true } and no validation — leave the
+        // pending submission in place and retry on the next online event.
+        if (response.data?.queued) return;
+
+        const validation = response.data?.validation;
+
+        // Only clean up and report success when the server actually accepted it.
+        // A failed validation still returns `validation`, so we must check isValid —
+        // otherwise we'd delete the technician's work and falsely report success.
+        if (validation && validation.isValid !== false) {
           offlineStorage.removePendingSubmission(id).catch(() => {});
           offlineStorage.removeOfflineDraft(id).catch(() => {});
           try { await deleteDraftResponse(id); } catch (_) {}
           setPendingSubmission(false);
-          const overallStatus = response.data.validation.overallStatus.toUpperCase();
+          const overallStatus = (validation.overallStatus || '').toUpperCase();
           setAlertSuccess({
             message: `Checklist submitted successfully! Overall Status: ${overallStatus}. You can now download the PDF report from the Task Details page.`,
             onClose: () => navigate(`/tasks/${id}`)
           });
         }
+        // If validation failed, keep the pending submission so the technician can
+        // open the form, fix the flagged items, and resubmit.
       } catch (_) {
         // Will retry on next online event or manual re-submit
       }

@@ -146,6 +146,28 @@ module.exports = (pool) => {
         }
       }
 
+      // Idempotency guard for offline replay.
+      // A technician working offline queues a submission; when they reconnect the
+      // client replays it. If the response already arrived (e.g. the network blipped
+      // after the server saved it but before the client got the ack), replaying would
+      // insert a duplicate response AND deduct inventory a second time. Detect an
+      // existing response for this task and return it as a success no-op instead.
+      const existingResponse = await db.query(
+        'SELECT id FROM checklist_responses WHERE task_id = $1 LIMIT 1',
+        [task_id]
+      );
+      if (existingResponse.rows.length > 0) {
+        return res.status(200).json({
+          message: 'Checklist response already submitted for this task',
+          duplicate: true,
+          validation: {
+            isValid: true,
+            overallStatus: task.overall_status || 'pass',
+            errors: []
+          }
+        });
+      }
+
       // Spares are now directly selected and automatically deducted - no restrictions
 
       // Parse JSONB fields if they're strings
