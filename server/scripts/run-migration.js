@@ -17,6 +17,16 @@ const config = {
   password: process.env.DB_PASSWORD || args.find(arg => arg.startsWith('--password='))?.split('=')[1] || 'postgres',
 };
 
+// SSL for managed databases (DigitalOcean, AWS RDS, etc.) — mirror the main app's
+// pool config in index.js so migrations connect the same way the server does.
+// Without this, this script fails against SSL-requiring managed Postgres.
+if (process.env.DB_SSL === 'true') {
+  config.ssl = {
+    rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    ca: process.env.DB_SSL_CA ? fs.readFileSync(process.env.DB_SSL_CA, 'utf8') : undefined,
+  };
+}
+
 console.log('Database configuration:');
 console.log(`  Host: ${config.host}`);
 console.log(`  Port: ${config.port}`);
